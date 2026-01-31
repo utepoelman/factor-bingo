@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Factor BINGO Suite v3</title>
+    <title>Factor BINGO Suite v4 (Sound Enabled)</title>
     <style>
         :root {
             --primary: #4a90e2;
@@ -160,7 +160,7 @@
             background: white; padding: 30px; border-radius: 12px; text-align: center; max-width: 400px; width: 90%;
             animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
-        .modal-box.large { max-width: 800px; } /* For verification */
+        .modal-box.large { max-width: 800px; } 
         
         .verify-grid {
             display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-height: 60vh; overflow-y: auto; padding: 10px;
@@ -328,6 +328,38 @@
     </div>
 
     <script>
+        // --- SOUND ENGINE (Base64) ---
+        // Simple 'Win' Chime
+        const winSoundData = "data:audio/wav;base64,UklGRjQBAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YREBAACAgICAgICAgICAgICAgICAgICAf39/f39/f39/f39/f39/f39/gYGDg4SFhYaGh4iIiYqLi4yNjY6OkJCSkpOUlZaXmJmam5ycnZ6en6ChoqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/wABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9AQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5/gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ycnZ6en6ChoqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/w=="; 
+        // Note: The string above is a very short placeholder. 
+        // To keep the file small and functional, I will use an oscillator based sound instead of a large MP3 string.
+        
+        function playWinSound() {
+            // Using Web Audio API to generate a sound without external files or massive Base64 strings
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if(!AudioContext) return;
+            
+            const ctx = new AudioContext();
+            const osc = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+            
+            osc.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            
+            // Arcade "Ding Ding Ding" Effect
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+            osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+            osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
+            osc.frequency.setValueAtTime(1046.50, ctx.currentTime + 0.3); // C6
+            
+            gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.8);
+
+            osc.start();
+            osc.stop(ctx.currentTime + 0.8);
+        }
+
         // --- UTILITIES ---
         function showView(id) {
             document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
@@ -420,7 +452,10 @@
                 spState.target = null;
                 document.getElementById('spRollBtn').disabled = false;
                 document.getElementById('spPassBtn').disabled = true;
-                if(checkWin(spState.marked)) setTimeout(() => document.getElementById('spWinModal').style.display = 'flex', 500);
+                if(checkWin(spState.marked)) {
+                    playWinSound(); // PLAY SOUND
+                    setTimeout(() => document.getElementById('spWinModal').style.display = 'flex', 500);
+                }
             } else {
                 el.classList.add('wrong');
                 document.getElementById('spFeedback').innerHTML = `<span style="color:red">Try again!</span>`;
@@ -595,7 +630,10 @@
                 document.getElementById('mpInput').value = '';
                 document.getElementById('mpPassBtn').disabled = true;
                 document.getElementById('mpFeedback').innerHTML = `<span style="color:green">Correct!</span> Wait for next number.`;
-                if(checkWin(mpState.marked)) document.getElementById('mpWinModal').style.display = 'flex';
+                if(checkWin(mpState.marked)) {
+                    playWinSound(); // PLAY SOUND
+                    document.getElementById('mpWinModal').style.display = 'flex';
+                }
             } else {
                 el.classList.add('wrong');
                 document.getElementById('mpFeedback').innerHTML = `<span style="color:red">Oops!</span> ${val} is not a factor of ${mpState.currentRoundNum}`;
