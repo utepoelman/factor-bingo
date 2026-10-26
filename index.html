@@ -1,1315 +1,1245 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" class="h-full bg-slate-900 text-slate-100">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Factor BINGO Suite - Multiplayer & Solo</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        brand: {
-                            50: '#f0f9ff',
-                            100: '#e0f2fe',
-                            500: '#0ea5e9',
-                            600: '#0284c7',
-                            700: '#0369a1',
-                            900: '#0c4a6e',
-                        }
-                    },
-                    animation: {
-                        'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                        'bounce-short': 'bounce 0.6s ease-in-out 2',
-                        'shake': 'shake 0.4s ease-in-out',
-                    },
-                    keyframes: {
-                        shake: {
-                            '0%, 100%': { transform: 'translateX(0)' },
-                            '20%, 60%': { transform: 'translateX(-6px)' },
-                            '40%, 80%': { transform: 'translateX(6px)' },
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    <!-- PeerJS CDN for WebRTC P2P -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <!-- Canvas Confetti CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <!-- Google Font Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            user-select: none;
-        }
-        
-        /* Custom scrollbars */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: rgba(15, 23, 42, 0.6);
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(51, 65, 85, 0.8);
-            border-radius: 9999px;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Factor BINGO Suite</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PeerJS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- Canvas Confetti CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <!-- Font Awesome Icons CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Inter Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-        /* Printable Certificate Styles */
-        @media print {
-            body * {
-                visibility: hidden;
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] },
+          colors: {
+            brand: { 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+          },
+          animation: {
+            'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'shake': 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both',
+            'bounce-short': 'bounce 0.5s ease infinite'
+          },
+          keyframes: {
+            shake: {
+              '10%, 90%': { transform: 'translate3d(-1px, 0, 0)' },
+              '20%, 80%': { transform: 'translate3d(2px, 0, 0)' },
+              '30%, 50%, 70%': { transform: 'translate3d(-4px, 0, 0)' },
+              '40%, 60%': { transform: 'translate3d(4px, 0, 0)' }
             }
-            #certificate-modal, #certificate-modal * {
-                visibility: visible;
-            }
-            #certificate-modal {
-                position: fixed;
-                left: 0;
-                top: 0;
-                width: 100vw;
-                height: 100vh;
-                background: white !important;
-                color: black !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-            .no-print {
-                display: none !important;
-            }
+          }
         }
-    </style>
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbars & Matrix Dot Utilities */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+    ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.4); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.8); }
+
+    .matrix-dot {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .matrix-dot.active {
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.8), 0 0 12px rgba(34, 197, 94, 0.4);
+    }
+    .card-cell {
+      user-select: none;
+      touch-action: manipulation;
+    }
+  </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-white">
+<body class="h-full flex flex-col font-sans antialiased bg-slate-950 text-slate-100 overflow-x-hidden selection:bg-indigo-500 selection:text-white">
 
-    <!-- TOP HEADER / NAVBAR -->
-    <header class="border-b border-slate-800/80 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <!-- Brand Logo -->
-            <div class="flex items-center space-x-3 cursor-pointer" onclick="app.goHome()">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 text-white font-black text-xl tracking-wider">
-                    F
-                </div>
-                <div>
-                    <h1 class="font-extrabold text-lg sm:text-xl tracking-tight bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-300 bg-clip-text text-transparent">
-                        FACTOR BINGO
-                    </h1>
-                    <p class="text-[10px] text-slate-400 -mt-1 font-medium tracking-wider uppercase">P2P PeerJS Edition</p>
-                </div>
-            </div>
-
-            <!-- Room Badge & Controls -->
-            <div class="flex items-center space-x-2 sm:space-x-4">
-                <div id="room-badge" class="hidden items-center bg-slate-800/90 border border-slate-700/80 rounded-full px-3 py-1 text-xs font-semibold text-cyan-300">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping mr-2"></span>
-                    <span id="room-badge-text">ROOM: ----</span>
-                </div>
-
-                <button id="sound-btn" onclick="sound.toggleMute()" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition border border-slate-700/50" title="Toggle Sound">
-                    <svg id="sound-icon-on" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M17.55 6.45a8 8 0 010 11.314M11 5L6 9H2v6h4l5 4V5z"/></svg>
-                    <svg id="sound-icon-off" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" stroke-dasharray="2 2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/></svg>
-                </button>
-
-                <button onclick="app.showMathGuide()" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition border border-slate-700/50 flex items-center space-x-1 text-xs font-medium" title="Factor Guide">
-                    <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-                    <span class="hidden sm:inline">Rules &amp; Math</span>
-                </button>
-            </div>
+  <!-- Header Banner -->
+  <header class="w-full bg-slate-900/80 backdrop-blur border-b border-slate-800 sticky top-0 z-30 px-4 py-3">
+    <div class="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-2">
+      <div class="flex items-center space-x-3 cursor-pointer" onclick="app.showLanding()">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-500 flex items-center justify-center text-white font-extrabold text-xl shadow-lg shadow-indigo-500/30">
+          <i class="fa-solid fa-square-root-variable"></i>
         </div>
-    </header>
-
-    <!-- NOTIFICATION TOASTER -->
-    <div id="toast-container" class="fixed top-20 right-4 z-50 flex flex-col space-y-2 pointer-events-none"></div>
-
-    <!-- MAIN APP CONTAINER -->
-    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col">
-
-        <!-- LOBBY VIEW -->
-        <div id="view-lobby" class="flex-1 flex flex-col justify-center items-center py-6">
-            <div class="max-w-md w-full space-y-6">
-                <!-- Hero Header -->
-                <div class="text-center space-y-2">
-                    <div class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                        ✨ 100% Peer-to-Peer • Instant Hosting
-                    </div>
-                    <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-                        Ready for Factor BINGO?
-                    </h2>
-                    <p class="text-sm text-slate-400">
-                        Practice factors solo or host a live multiplayer game with live opponent board tracking!
-                    </p>
-                </div>
-
-                <!-- Input Player Name -->
-                <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
-                    <div>
-                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Your Display Name</label>
-                        <input type="text" id="input-player-name" placeholder="Enter your name..." value="MathChamp" max="15" 
-                               class="w-full px-4 py-3 bg-slate-950 border border-slate-700/80 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none text-white text-base font-semibold transition">
-                    </div>
-
-                    <!-- Mode Options -->
-                    <div class="grid grid-cols-1 gap-3 pt-2">
-                        <!-- Host Room Button -->
-                        <button onclick="app.hostRoom()" class="w-full py-3.5 px-4 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-cyan-600/20 hover:shadow-cyan-500/30 transition transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center space-x-2">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                            <span>Host New Room (4-Digit Code)</span>
-                        </button>
-
-                        <div class="relative flex py-1 items-center">
-                            <div class="flex-grow border-t border-slate-800"></div>
-                            <span class="flex-shrink mx-3 text-slate-500 text-xs uppercase font-bold">Or Join Existing</span>
-                            <div class="flex-grow border-t border-slate-800"></div>
-                        </div>
-
-                        <!-- Join Code Input & Button -->
-                        <div class="flex space-x-2">
-                            <input type="text" id="input-room-code" placeholder="4-Digit Code (e.g. 5839)" maxlength="4" 
-                                   class="flex-1 px-4 py-3 bg-slate-950 border border-slate-700/80 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-white text-center font-mono font-bold text-lg tracking-widest placeholder-slate-600 transition uppercase">
-                            <button onclick="app.joinRoom()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/20 transition transform hover:-translate-y-0.5 active:translate-y-0">
-                                Join
-                            </button>
-                        </div>
-
-                        <div class="relative flex py-1 items-center">
-                            <div class="flex-grow border-t border-slate-800"></div>
-                            <span class="flex-shrink mx-3 text-slate-500 text-xs uppercase font-bold">Offline Mode</span>
-                            <div class="flex-grow border-t border-slate-800"></div>
-                        </div>
-
-                        <!-- Solo Button -->
-                        <button onclick="app.startSoloGame()" class="w-full py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-semibold rounded-xl border border-slate-700/60 transition flex items-center justify-center space-x-2">
-                            <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                            <span>Single Player Practice (vs AI Bots)</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Connection status note -->
-                <div id="lobby-status" class="text-center text-xs text-slate-500 font-medium min-h-[20px]">
-                    WebRTC PeerJS initialized &bull; Zero Server Setup Required
-                </div>
-            </div>
+        <div>
+          <h1 class="font-black text-xl tracking-tight bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400 bg-clip-text text-transparent">
+            Factor BINGO
+          </h1>
+          <p class="text-xs text-slate-400 font-medium hidden sm:block">Multiplayer Math Strategy Game</p>
         </div>
+      </div>
 
-        <!-- GAMEPLAY VIEW -->
-        <div id="view-game" class="hidden flex-1 flex-col space-y-6">
+      <!-- Network & Sound Controls -->
+      <div class="flex items-center space-x-3">
+        <!-- Audio Mute Toggle -->
+        <button id="muteBtn" onclick="sound.toggleMute()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-semibold flex items-center space-x-2 transition border border-slate-700">
+          <i id="muteIcon" class="fa-solid fa-volume-high text-indigo-400"></i>
+          <span id="muteText" class="hidden sm:inline">Sound</span>
+        </button>
 
-            <!-- HOST / ROOM CONTROL BAR -->
-            <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 shadow-xl">
-                <!-- Left: Status & Room Info -->
-                <div class="flex items-center space-x-3">
-                    <div class="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-300 flex items-center space-x-2">
-                        <span id="role-badge-dot" class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
-                        <span id="role-badge-text">HOST</span>
-                    </div>
-                    <div id="room-code-display-wrap" class="flex items-center space-x-2 bg-indigo-950/60 border border-indigo-800/80 px-3.5 py-1.5 rounded-xl">
-                        <span class="text-xs text-indigo-300 font-medium">CODE:</span>
-                        <span id="display-room-code" class="text-base font-mono font-black text-indigo-200 tracking-wider">----</span>
-                        <button onclick="app.copyRoomCode()" class="p-1 hover:text-indigo-100 text-indigo-400 transition" title="Copy Code">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Center: Target Roll Trigger (Host or Solo) -->
-                <div id="host-game-controls" class="flex items-center space-x-3">
-                    <button onclick="app.rollTargetNumber()" id="btn-roll-target" class="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black rounded-xl shadow-lg shadow-emerald-500/20 transition transform hover:-translate-y-0.5 active:translate-y-0 flex items-center space-x-2 text-sm">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                        <span>ROLL TARGET</span>
-                    </button>
-
-                    <!-- Auto Roll Toggle -->
-                    <div class="flex items-center space-x-2 bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-xl text-xs font-semibold">
-                        <label for="auto-roll-toggle" class="cursor-pointer text-slate-300">Auto Roll:</label>
-                        <input type="checkbox" id="auto-roll-toggle" onchange="app.toggleAutoRoll(this.checked)" class="w-4 h-4 text-emerald-500 rounded accent-emerald-500 cursor-pointer">
-                        <select id="auto-roll-speed" onchange="app.updateAutoRollSpeed(this.value)" class="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1 outline-none">
-                            <option value="15">15s</option>
-                            <option value="30" selected>30s</option>
-                            <option value="45">45s</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Right: Exit / New Game -->
-                <button onclick="app.leaveGame()" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition">
-                    Leave Game
-                </button>
-            </div>
-
-            <!-- MAIN GRID & OPPONENTS FLEX LAYOUT -->
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-
-                <!-- LEFT / CENTER COLUMN: Target Caller & Player Bingo Board (8 Cols on LG) -->
-                <div class="lg:col-span-8 flex flex-col space-y-6">
-
-                    <!-- CALLER / TARGET NUMBER BOARD -->
-                    <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-6">
-                        <!-- Glow Accent Background -->
-                        <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-                        <!-- Target Number Display -->
-                        <div class="flex items-center space-x-5">
-                            <div class="relative">
-                                <div id="target-sphere" class="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-gradient-to-tr from-cyan-600 via-sky-500 to-indigo-600 flex flex-col items-center justify-center shadow-xl shadow-cyan-500/20 text-white font-black transition-all transform hover:scale-105 border-2 border-white/20">
-                                    <span class="text-[10px] uppercase font-bold tracking-widest opacity-80">TARGET</span>
-                                    <span id="target-number-text" class="text-4xl sm:text-5xl tracking-tighter leading-none mt-0.5">--</span>
-                                </div>
-                            </div>
-                            <div>
-                                <h3 class="text-xs uppercase font-bold tracking-wider text-slate-400">Current Round Goal</h3>
-                                <p class="text-base sm:text-lg font-bold text-slate-100 mt-0.5">
-                                    Find numbers on your board that divide evenly into <span id="target-number-inline" class="text-cyan-400 font-extrabold">--</span>!
-                                </p>
-                                <p id="factor-hint-text" class="text-xs text-cyan-300/80 font-mono mt-1 min-h-[18px]">
-                                    Press "ROLL TARGET" to start
-                                </p>
-                            </div>
-                        </div>
-
-                        <!-- Turn Action & Timer Bar -->
-                        <div class="flex flex-col items-stretch sm:items-end w-full sm:w-auto space-y-3">
-                            <button onclick="app.passTurn()" id="btn-pass-turn" class="px-5 py-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold rounded-xl text-xs transition flex items-center justify-center space-x-2">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                                <span>No Factors on Board (Pass)</span>
-                            </button>
-
-                            <!-- Countdown Bar -->
-                            <div id="timer-progress-wrap" class="hidden w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
-                                <div id="timer-progress-bar" class="bg-gradient-to-r from-emerald-400 to-cyan-400 h-full w-full transition-all duration-1000"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- PLAYER'S 5x5 BINGO BOARD -->
-                    <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl flex flex-col space-y-4">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center space-x-2">
-                                <span class="text-base font-extrabold text-slate-200">Your Bingo Card</span>
-                                <span class="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">5x5 Grid</span>
-                            </div>
-                            <div class="flex items-center space-x-4 text-xs font-semibold">
-                                <div class="text-slate-400">Score: <span id="player-score-text" class="text-emerald-400 text-sm font-bold">0</span></div>
-                                <div class="text-slate-400">Lines: <span id="player-lines-text" class="text-cyan-400 text-sm font-bold">0 / 5</span></div>
-                            </div>
-                        </div>
-
-                        <!-- 5x5 Grid Container -->
-                        <div id="bingo-grid" class="grid grid-cols-5 gap-2 sm:gap-3 aspect-square w-full max-w-xl mx-auto p-2 bg-slate-950/80 rounded-xl border border-slate-800/80">
-                            <!-- Cells dynamically rendered -->
-                        </div>
-
-                        <!-- Recent Call Log -->
-                        <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-                            <span class="font-semibold uppercase text-[10px] tracking-wider text-slate-500">Recent Roll History:</span>
-                            <div id="target-history-chips" class="flex items-center space-x-1.5 overflow-x-auto py-1">
-                                <span class="text-slate-600 font-mono italic">None yet</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- RIGHT COLUMN: Real-Time Opponent Dot-Card Tracker (4 Cols on LG) -->
-                <div class="lg:col-span-4 flex flex-col space-y-4">
-                    <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col space-y-4">
-                        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                            <div class="flex items-center space-x-2">
-                                <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                                <h3 class="font-extrabold text-sm text-slate-200 uppercase tracking-wider">Live Players Dot Cards</h3>
-                            </div>
-                            <span id="player-count-badge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                                1 Player
-                            </span>
-                        </div>
-
-                        <!-- Opponents Container -->
-                        <div id="opponents-list" class="space-y-4 max-h-[600px] overflow-y-auto pr-1">
-                            <!-- Rendered dot cards for connected players -->
-                        </div>
-                    </div>
-                </div>
-
-            </div>
+        <!-- Status Pill -->
+        <div id="statusPill" class="px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-800 border border-slate-700 flex items-center space-x-2">
+          <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+          <span id="statusText" class="text-slate-300">Offline</span>
         </div>
-    </main>
-
-    <!-- MATH GUIDE / RULES MODAL -->
-    <div id="modal-guide" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
-            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 class="text-lg font-bold text-slate-100 flex items-center space-x-2">
-                    <span class="text-amber-400">💡</span>
-                    <span>Factor BINGO Rules &amp; Math Guide</span>
-                </h3>
-                <button onclick="app.hideMathGuide()" class="text-slate-400 hover:text-white p-1">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
-            </div>
-
-            <div class="space-y-3 text-sm text-slate-300 leading-relaxed">
-                <p><strong>What is a Factor?</strong> A factor is a number that divides evenly into another number without leaving a remainder.</p>
-                <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-xs text-cyan-300">
-                    Example: Target = 36<br>
-                    Factors of 36 are: 1, 2, 3, 4, 6, 9, 12, 18, 36<br>
-                    (Because 36 ÷ 9 = 4 exactly!)
-                </div>
-                <h4 class="font-bold text-slate-200 text-xs uppercase tracking-wider pt-2">How to Play:</h4>
-                <ul class="list-disc list-inside space-y-1 text-slate-400 text-xs">
-                    <li>When a target number is called, inspect your 5x5 board.</li>
-                    <li>Click any number on your board that is a **factor** of the called target number.</li>
-                    <li>If correct, your tile turns green and updates your live dot grid across all opponents!</li>
-                    <li>If you have no valid factors on your board, click "No Factors on Board (Pass)".</li>
-                    <li>Get 5 claimed tiles in a row (horizontal, vertical, or diagonal) to claim **BINGO!**</li>
-                </ul>
-            </div>
-
-            <div class="pt-2">
-                <button onclick="app.hideMathGuide()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition">
-                    Got It, Let's Play!
-                </button>
-            </div>
-        </div>
+      </div>
     </div>
+  </header>
 
-    <!-- WINNER & CERTIFICATE MODAL -->
-    <div id="certificate-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-        <div class="bg-gradient-to-b from-slate-900 to-slate-950 border-4 border-amber-500/60 rounded-3xl max-w-2xl w-full p-8 shadow-2xl relative overflow-hidden text-center space-y-6">
-            <!-- Decorative Gold Corner Accents -->
-            <div class="absolute top-2 left-2 w-12 h-12 border-t-2 border-l-2 border-amber-400/80 rounded-tl-xl pointer-events-none"></div>
-            <div class="absolute top-2 right-2 w-12 h-12 border-t-2 border-r-2 border-amber-400/80 rounded-tr-xl pointer-events-none"></div>
-            <div class="absolute bottom-2 left-2 w-12 h-12 border-b-2 border-l-2 border-amber-400/80 rounded-bl-xl pointer-events-none"></div>
-            <div class="absolute bottom-2 right-2 w-12 h-12 border-b-2 border-r-2 border-amber-400/80 rounded-br-xl pointer-events-none"></div>
+  <!-- Main Dynamic View Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 flex flex-col justify-center">
 
-            <!-- Certificate Header -->
-            <div class="space-y-1">
-                <div class="text-amber-400 text-4xl mb-1">🏆</div>
-                <h2 class="text-xs uppercase tracking-[0.3em] font-bold text-amber-400">Official Certificate of Mastery</h2>
-                <h1 class="text-3xl sm:text-4xl font-black text-white font-serif tracking-wide bg-gradient-to-r from-amber-200 via-amber-400 to-amber-200 bg-clip-text text-transparent">
-                    FACTOR BINGO CHAMPION
-                </h1>
+    <!-- 1. LANDING / MODE SELECTOR VIEW -->
+    <section id="viewLanding" class="max-w-xl w-full mx-auto space-y-6">
+      <div class="text-center space-y-2">
+        <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Ready to Play?</h2>
+        <p class="text-slate-400">Match target numbers with their factors on your 5x5 BINGO card to win!</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+        <!-- Host Game Card -->
+        <div class="bg-gradient-to-b from-indigo-950/40 to-slate-900 border border-indigo-500/30 hover:border-indigo-500/70 rounded-2xl p-6 flex flex-col justify-between space-y-4 shadow-xl transition hover:-translate-y-1">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-2xl mb-4 border border-indigo-500/30">
+              <i class="fa-solid fa-crown"></i>
             </div>
-
-            <p class="text-xs uppercase tracking-widest text-slate-400">This honor is proudly awarded to</p>
-            
-            <div class="py-2 border-b-2 border-amber-500/40 inline-block px-12">
-                <span id="cert-winner-name" class="text-3xl font-extrabold text-cyan-300 tracking-wider">MATH CHAMPION</span>
-            </div>
-
-            <p class="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
-                For demonstrating exceptional mathematical fluency in identifying numerical factors, rapid division reasoning, and completing a winning line in Factor BINGO!
-            </p>
-
-            <div class="grid grid-cols-3 gap-4 bg-slate-900/80 p-4 rounded-xl border border-slate-800 text-xs">
-                <div>
-                    <span class="block text-slate-500 text-[10px] uppercase font-bold">Date Issued</span>
-                    <span id="cert-date" class="font-mono text-slate-200 font-semibold">2026-10-27</span>
-                </div>
-                <div>
-                    <span class="block text-slate-500 text-[10px] uppercase font-bold">Final Score</span>
-                    <span id="cert-score" class="font-mono text-emerald-400 font-bold">450 Pts</span>
-                </div>
-                <div>
-                    <span class="block text-slate-500 text-[10px] uppercase font-bold">Room Code</span>
-                    <span id="cert-room" class="font-mono text-cyan-400 font-bold">5839</span>
-                </div>
-            </div>
-
-            <!-- Modal Controls -->
-            <div class="flex flex-wrap items-center justify-center gap-3 pt-2 no-print">
-                <button onclick="window.print()" class="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-lg transition flex items-center space-x-2 text-xs">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
-                    <span>Print Certificate</span>
-                </button>
-                <button onclick="app.closeCertificate()" class="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl border border-slate-700 text-xs transition">
-                    Continue Playing
-                </button>
-            </div>
+            <h3 class="text-xl font-bold text-white">Host a Game</h3>
+            <p class="text-sm text-slate-400 mt-1">Create a 4-digit room code, manage players, and trigger rolls.</p>
+          </div>
+          <button onclick="app.setupHostLobby()" class="w-full py-3 px-4 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition flex items-center justify-center space-x-2">
+            <span>Create Room</span>
+            <i class="fa-solid fa-arrow-right text-sm"></i>
+          </button>
         </div>
+
+        <!-- Join Game Card -->
+        <div class="bg-gradient-to-b from-purple-950/40 to-slate-900 border border-purple-500/30 hover:border-purple-500/70 rounded-2xl p-6 flex flex-col justify-between space-y-4 shadow-xl transition hover:-translate-y-1">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-2xl mb-4 border border-purple-500/30">
+              <i class="fa-solid fa-users"></i>
+            </div>
+            <h3 class="text-xl font-bold text-white">Join Room</h3>
+            <p class="text-sm text-slate-400 mt-1">Enter a 4-digit code provided by your host to join the match.</p>
+          </div>
+          <button onclick="app.showJoinForm()" class="w-full py-3 px-4 rounded-xl font-bold bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/30 transition flex items-center justify-center space-x-2">
+            <span>Join with Code</span>
+            <i class="fa-solid fa-right-to-bracket text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Offline Practice Button -->
+      <div class="pt-2 text-center">
+        <button onclick="app.startOfflinePractice()" class="text-sm font-semibold text-slate-400 hover:text-white transition underline decoration-dashed underline-offset-4">
+          <i class="fa-solid fa-robot mr-1"></i> Play Solo Practice Mode (vs AI)
+        </button>
+      </div>
+    </section>
+
+    <!-- 2. JOIN GAME MODAL / FORM -->
+    <section id="viewJoinForm" class="hidden max-w-md w-full mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <h3 class="text-xl font-bold text-white flex items-center space-x-2">
+          <i class="fa-solid fa-door-open text-purple-400"></i>
+          <span>Join Factor BINGO</span>
+        </h3>
+        <button onclick="app.showLanding()" class="text-slate-400 hover:text-white transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Your Name</label>
+          <input type="text" id="inputPlayerName" placeholder="e.g. MathChamp" maxlength="12" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-purple-500 font-medium">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">4-Digit Room Code</label>
+          <input type="text" id="inputRoomCode" placeholder="e.g. 4829" maxlength="4" pattern="[0-9]*" inputmode="numeric" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-2xl tracking-widest text-center font-mono font-bold text-purple-400 focus:outline-none focus:border-purple-500 uppercase">
+        </div>
+      </div>
+
+      <div class="flex space-x-3 pt-2">
+        <button onclick="app.showLanding()" class="w-1/3 py-3 rounded-xl font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition">Cancel</button>
+        <button onclick="app.connectAsPlayer()" class="w-2/3 py-3 rounded-xl font-bold bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/30 transition flex items-center justify-center space-x-2">
+          <span>Connect Now</span>
+          <i class="fa-solid fa-plug text-sm"></i>
+        </button>
+      </div>
+    </section>
+
+    <!-- 3. LOBBY VIEW (Host & Joined Player Waiting Room) -->
+    <section id="viewLobby" class="hidden max-w-3xl w-full mx-auto space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+        
+        <!-- Room Code Display -->
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-950/70 rounded-xl p-4 border border-indigo-500/20">
+          <div>
+            <span class="text-xs uppercase font-extrabold tracking-wider text-indigo-400 block">Room Code</span>
+            <div class="flex items-center space-x-3">
+              <span id="lobbyRoomCode" class="text-4xl font-black font-mono tracking-widest text-white">----</span>
+              <button onclick="app.copyRoomCode()" class="px-2.5 py-1 text-xs font-semibold rounded-md bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition">
+                <i class="fa-regular fa-copy mr-1"></i> Copy
+              </button>
+            </div>
+          </div>
+
+          <div class="text-right flex items-center space-x-4">
+            <div id="lobbyTimerConfig" class="text-left sm:text-right hidden sm:block">
+              <span class="text-xs font-semibold text-slate-400 block">Round Timer</span>
+              <select id="selectTimerDuration" onchange="app.updateTimerSetting(this.value)" class="bg-slate-900 text-xs font-semibold border border-slate-700 rounded-lg px-2 py-1 text-slate-200">
+                <option value="15">15 Seconds</option>
+                <option value="30" selected>30 Seconds (Default)</option>
+                <option value="45">45 Seconds</option>
+                <option value="60">60 Seconds</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Connection Message for Players -->
+        <div id="playerWaitingNotice" class="hidden bg-purple-950/40 border border-purple-500/30 rounded-xl p-4 text-center space-y-2">
+          <div class="flex items-center justify-center space-x-2 text-purple-300 font-bold">
+            <i class="fa-solid fa-circle-notch fa-spin"></i>
+            <span>Connected to Host! Waiting for host to start the game...</span>
+          </div>
+          <p class="text-xs text-slate-400">Get ready to calculate factors when Roll #1 begins!</p>
+        </div>
+
+        <!-- Joined Players Grid -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <h4 class="font-bold text-slate-200 text-sm flex items-center space-x-2">
+              <i class="fa-solid fa-users text-indigo-400"></i>
+              <span>Players in Lobby (<span id="connectedPlayerCount">1</span>)</span>
+            </h4>
+            <span class="text-xs text-slate-400">First roll starts when Host launches</span>
+          </div>
+
+          <div id="lobbyPlayersList" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <!-- Dynamic player pills inserted here -->
+          </div>
+        </div>
+
+        <!-- Host Action Button -->
+        <div id="hostLobbyControls" class="pt-4 border-t border-slate-800 flex flex-col sm:flex-row gap-3">
+          <button onclick="app.startMultiplayerGame()" class="flex-1 py-4 px-6 rounded-xl font-extrabold text-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 transition flex items-center justify-center space-x-3">
+            <i class="fa-solid fa-play"></i>
+            <span>START GAME & ROLL #1</span>
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 4. ACTIVE GAMEPLAY VIEW -->
+    <section id="viewGameplay" class="hidden space-y-6">
+      
+      <!-- Top Status & Timer Bar Header -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-4">
+        
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <!-- Current Roll Target Banner -->
+          <div class="flex items-center space-x-4 w-full sm:w-auto">
+            <div class="relative">
+              <div id="targetRollDisplay" class="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-700 flex flex-col items-center justify-center shadow-lg shadow-indigo-500/30 border-2 border-indigo-400/40">
+                <span class="text-xs font-extrabold text-indigo-200 uppercase tracking-widest">Target</span>
+                <span id="targetNumber" class="text-3xl font-black text-white">--</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center space-x-2">
+                <span class="text-xs font-extrabold text-indigo-400 uppercase tracking-wider">Round</span>
+                <span id="roundCounter" class="text-xs font-bold px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">#1</span>
+              </div>
+              <h3 id="targetPrompt" class="text-lg font-bold text-white mt-0.5">Find a Factor of <span id="targetPromptNum" class="text-indigo-400">--</span></h3>
+              <p class="text-xs text-slate-400">Tap a card number that divides evenly into the target!</p>
+            </div>
+          </div>
+
+          <!-- Timer & Roll Controls -->
+          <div class="flex items-center space-x-3 w-full sm:w-auto justify-end">
+            <!-- Host Override Roll Button -->
+            <button id="hostForceRollBtn" onclick="app.hostTriggerRoll()" class="hidden px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center space-x-1.5 shadow">
+              <i class="fa-solid fa-dice"></i>
+              <span>Roll Now</span>
+            </button>
+
+            <!-- Host Pause/Resume Button -->
+            <button id="hostPauseBtn" onclick="app.togglePauseGame()" class="hidden px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition border border-slate-700">
+              <i id="pauseIcon" class="fa-solid fa-pause"></i>
+            </button>
+
+            <!-- Pass Turn Button for Players -->
+            <button id="passTurnBtn" onclick="app.passTurn()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30 font-bold text-xs transition flex items-center space-x-2">
+              <i class="fa-solid fa-forward"></i>
+              <span>No Factors / Pass</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 30-Second Timed Countdown Bar -->
+        <div class="space-y-1">
+          <div class="flex justify-between items-center text-xs font-semibold">
+            <span class="text-slate-400 flex items-center space-x-1">
+              <i class="fa-regular fa-clock text-indigo-400"></i>
+              <span>Time Remaining</span>
+            </span>
+            <span id="timerSeconds" class="font-mono text-indigo-300 font-bold">30s</span>
+          </div>
+          <div class="w-full bg-slate-950 rounded-full h-3 p-0.5 border border-slate-800 overflow-hidden">
+            <div id="timerProgressBar" class="bg-gradient-to-r from-emerald-500 via-yellow-400 to-rose-500 h-full rounded-full transition-all duration-1000 ease-linear" style="width: 100%;"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Main Play Layout: My BINGO Card + Live Opponents Matrix Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- My BINGO Board Card (2 Columns on Large Screens) -->
+        <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <h3 class="font-bold text-lg text-white">Your 5x5 Card</h3>
+              <span id="playerScoreBadge" class="text-xs font-extrabold bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full border border-emerald-500/30">0 Lines</span>
+            </div>
+            <div class="flex space-x-1 text-indigo-400 text-sm font-extrabold tracking-widest">
+              <span>B</span><span>I</span><span>N</span><span>G</span><span>O</span>
+            </div>
+          </div>
+
+          <!-- 5x5 Grid Container -->
+          <div id="bingoGrid" class="grid grid-cols-5 gap-2 sm:gap-3 aspect-square max-w-md mx-auto">
+            <!-- Generated via JS -->
+          </div>
+        </div>
+
+        <!-- Live 5x5 Dot-Matrix Opponent Tracking -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+              <h3 class="font-bold text-sm text-slate-200 flex items-center space-x-2">
+                <i class="fa-solid fa-chart-grid text-emerald-400"></i>
+                <span>Live Opponent Matrix</span>
+              </h3>
+              <span class="text-xs text-slate-400">5x5 Progress</span>
+            </div>
+
+            <div id="opponentsMatrixContainer" class="space-y-4 max-h-[420px] overflow-y-auto pr-1">
+              <!-- Live Dot Matrix Mini Cards inserted here -->
+            </div>
+          </div>
+
+          <!-- Quick Legend -->
+          <div class="pt-3 border-t border-slate-800 flex items-center justify-around text-xs text-slate-400">
+            <div class="flex items-center space-x-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-slate-700 inline-block"></span>
+              <span>Unclaimed</span>
+            </div>
+            <div class="flex items-center space-x-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400 inline-block"></span>
+              <span>Claimed</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- WIN / GAME OVER MODAL -->
+  <div id="winModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-indigo-500/40 rounded-3xl p-6 sm:p-8 max-w-md w-full text-center space-y-6 shadow-2xl animate-shake">
+      <div class="w-20 h-20 bg-gradient-to-tr from-amber-400 to-yellow-500 rounded-full flex items-center justify-center mx-auto shadow-xl shadow-amber-500/30 text-slate-950 text-4xl">
+        <i class="fa-solid fa-trophy"></i>
+      </div>
+
+      <div class="space-y-2">
+        <h2 id="winTitle" class="text-3xl font-black text-white">BINGO!</h2>
+        <p id="winSubtitle" class="text-slate-300 font-medium"><span id="winnerName" class="text-amber-400 font-bold">Player</span> has completed a BINGO line!</p>
+      </div>
+
+      <div class="bg-slate-950/60 rounded-xl p-4 border border-slate-800 space-y-2 text-sm">
+        <div class="flex justify-between text-slate-400">
+          <span>Winning Player:</span>
+          <span id="winPlayerName" class="font-bold text-white">---</span>
+        </div>
+        <div class="flex justify-between text-slate-400">
+          <span>Total Rounds:</span>
+          <span id="winRoundCount" class="font-bold text-white">--</span>
+        </div>
+      </div>
+
+      <button onclick="app.closeWinModal()" class="w-full py-3.5 px-6 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition">
+        Continue Game
+      </button>
     </div>
+  </div>
 
+  <!-- APPLICATION JAVASCRIPT LOGIC -->
+  <script>
+    /**
+     * Web Audio API Synthesizer Sound Engine
+     */
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
 
-    <!-- JAVASCRIPT LOGIC ARCHITECTURE -->
-    <script>
-        // --- SOUND EFFECTS SYNTHESIZER (WEB AUDIO API) ---
-        class SoundEngine {
-            constructor() {
-                this.ctx = null;
-                this.muted = false;
-            }
-            init() {
-                if (!this.ctx) {
-                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                    if (AudioCtx) this.ctx = new AudioCtx();
-                }
-                if (this.ctx && this.ctx.state === 'suspended') {
-                    this.ctx.resume();
-                }
-            }
-            toggleMute() {
-                this.muted = !this.muted;
-                document.getElementById('sound-icon-on').classList.toggle('hidden', this.muted);
-                document.getElementById('sound-icon-off').classList.toggle('hidden', !this.muted);
-                app.showToast(this.muted ? 'Sound Muted' : 'Sound Enabled', 'info');
-            }
-            playMatch() {
-                if (this.muted) return;
-                this.init();
-                if (!this.ctx) return;
-                const now = this.ctx.currentTime;
-                const osc = this.ctx.createOscillator();
-                const gain = this.ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(523.25, now); // C5
-                osc.frequency.exponentialRampToValueAtTime(1046.50, now + 0.15); // C6
-                gain.gain.setValueAtTime(0.2, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-                osc.connect(gain);
-                gain.connect(this.ctx.destination);
-                osc.start(now);
-                osc.stop(now + 0.15);
-            }
-            playError() {
-                if (this.muted) return;
-                this.init();
-                if (!this.ctx) return;
-                const now = this.ctx.currentTime;
-                const osc = this.ctx.createOscillator();
-                const gain = this.ctx.createGain();
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(180, now);
-                osc.frequency.linearRampToValueAtTime(90, now + 0.2);
-                gain.gain.setValueAtTime(0.25, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-                osc.connect(gain);
-                gain.connect(this.ctx.destination);
-                osc.start(now);
-                osc.stop(now + 0.2);
-            }
-            playRoll() {
-                if (this.muted) return;
-                this.init();
-                if (!this.ctx) return;
-                const now = this.ctx.currentTime;
-                [350, 450, 550, 700].forEach((freq, i) => {
-                    const osc = this.ctx.createOscillator();
-                    const gain = this.ctx.createGain();
-                    osc.type = 'triangle';
-                    osc.frequency.value = freq;
-                    gain.gain.setValueAtTime(0.12, now + i * 0.04);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.04 + 0.05);
-                    osc.connect(gain);
-                    gain.connect(this.ctx.destination);
-                    osc.start(now + i * 0.04);
-                    osc.stop(now + i * 0.04 + 0.05);
-                });
-            }
-            playWin() {
-                if (this.muted) return;
-                this.init();
-                if (!this.ctx) return;
-                const notes = [523.25, 659.25, 783.99, 1046.50];
-                notes.forEach((freq, index) => {
-                    const now = this.ctx.currentTime + index * 0.12;
-                    const osc = this.ctx.createOscillator();
-                    const gain = this.ctx.createGain();
-                    osc.type = 'triangle';
-                    osc.frequency.value = freq;
-                    gain.gain.setValueAtTime(0.3, now);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-                    osc.connect(gain);
-                    gain.connect(this.ctx.destination);
-                    osc.start(now);
-                    osc.stop(now + 0.4);
-                });
-            }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
         }
-
-        const sound = new SoundEngine();
-
-        // --- BINGO SUITE MAIN APP CONTROLLER ---
-        const PEER_PREFIX = 'factorbingo-v2-';
-
-        class FactorBingoApp {
-            constructor() {
-                this.playerName = 'MathChamp';
-                this.isHost = false;
-                this.isSolo = false;
-                this.roomCode = '';
-                this.peer = null;
-                this.connections = {}; // peerId -> conn
-
-                this.targetNumber = null;
-                this.targetHistory = [];
-                this.autoRollTimer = null;
-                this.autoRollIntervalSec = 30;
-                this.countdownTimer = null;
-                this.remainingSeconds = 30;
-
-                // Local player board state
-                this.localBoard = []; // 25 numbers
-                this.claimedIndices = new Array(25).fill(false);
-                this.localScore = 0;
-                this.completedLinesCount = 0;
-
-                // All room players state: { peerId: { name, score, lines, claimed: array(25), isHost } }
-                this.playersState = {};
-
-                // AI Bots for Solo mode
-                this.aiBots = [];
-            }
-
-            init() {
-                // Event listener on window unload
-                window.addEventListener('beforeunload', () => {
-                    if (this.peer) this.peer.destroy();
-                });
-            }
-
-            goHome() {
-                this.stopAutoRoll();
-                if (this.peer) {
-                    this.peer.destroy();
-                    this.peer = null;
-                }
-                document.getElementById('view-lobby').classList.remove('hidden');
-                document.getElementById('view-game').classList.add('hidden');
-                document.getElementById('room-badge').classList.add('hidden');
-            }
-
-            // --- LOBBY ACTIONS ---
-            hostRoom() {
-                const nameInput = document.getElementById('input-player-name').value.trim();
-                if (!nameInput) {
-                    this.showToast('Please enter your display name', 'error');
-                    return;
-                }
-                this.playerName = nameInput;
-                this.isHost = true;
-                this.isSolo = false;
-
-                // Generate 4-digit code
-                this.roomCode = Math.floor(1000 + Math.random() * 9000).toString();
-                const peerId = PEER_PREFIX + this.roomCode;
-
-                document.getElementById('lobby-status').innerText = 'Initializing PeerJS host connection...';
-
-                try {
-                    this.peer = new Peer(peerId, {
-                        debug: 1,
-                        config: {
-                            'iceServers': [
-                                { urls: 'stun:stun.l.google.com:19302' },
-                                { urls: 'stun:global.stun.twilio.com:3478' }
-                            ]
-                        }
-                    });
-
-                    this.peer.on('open', (id) => {
-                        console.log('Host initialized:', id);
-                        this.setupGameUI();
-                        this.showToast(`Room created! Code: ${this.roomCode}`, 'success');
-                    });
-
-                    this.peer.on('connection', (conn) => {
-                        this.handleIncomingConnection(conn);
-                    });
-
-                    this.peer.on('error', (err) => {
-                        console.error('Peer host error:', err);
-                        if (err.type === 'unavailable-id') {
-                            // Retry generating room
-                            this.hostRoom();
-                        } else {
-                            this.showToast('Connection issue: ' + err.message, 'error');
-                            document.getElementById('lobby-status').innerText = 'Connection error. Try again.';
-                        }
-                    });
-                } catch (e) {
-                    this.showToast('PeerJS init failed, falling back to solo mode.', 'error');
-                }
-            }
-
-            joinRoom() {
-                const nameInput = document.getElementById('input-player-name').value.trim();
-                const codeInput = document.getElementById('input-room-code').value.trim();
-
-                if (!nameInput) {
-                    this.showToast('Please enter your display name', 'error');
-                    return;
-                }
-                if (!codeInput || codeInput.length !== 4) {
-                    this.showToast('Please enter a valid 4-digit room code', 'error');
-                    return;
-                }
-
-                this.playerName = nameInput;
-                this.roomCode = codeInput;
-                this.isHost = false;
-                this.isSolo = false;
-
-                document.getElementById('lobby-status').innerText = `Connecting to room ${codeInput}...`;
-
-                try {
-                    this.peer = new Peer({
-                        debug: 1,
-                        config: {
-                            'iceServers': [
-                                { urls: 'stun:stun.l.google.com:19302' },
-                                { urls: 'stun:global.stun.twilio.com:3478' }
-                            ]
-                        }
-                    });
-
-                    this.peer.on('open', (id) => {
-                        const hostPeerId = PEER_PREFIX + this.roomCode;
-                        const conn = this.peer.connect(hostPeerId, { reliable: true });
-
-                        conn.on('open', () => {
-                            this.connections['host'] = conn;
-                            // Send join request
-                            conn.send({
-                                type: 'JOIN_ROOM',
-                                playerName: this.playerName,
-                                peerId: id,
-                                claimed: this.claimedIndices
-                            });
-
-                            this.setupGameUI();
-                            this.showToast(`Connected to room ${this.roomCode}!`, 'success');
-                        });
-
-                        conn.on('data', (data) => {
-                            this.handleHostData(data);
-                        });
-
-                        conn.on('close', () => {
-                            this.showToast('Host left or room closed', 'error');
-                            this.goHome();
-                        });
-
-                        conn.on('error', (err) => {
-                            this.showToast('Room connection failed. Check code.', 'error');
-                        });
-                    });
-
-                    this.peer.on('error', (err) => {
-                        this.showToast('Unable to connect to room. Check room code.', 'error');
-                        document.getElementById('lobby-status').innerText = 'Room not found.';
-                    });
-                } catch (e) {
-                    this.showToast('Join room failed', 'error');
-                }
-            }
-
-            startSoloGame() {
-                const nameInput = document.getElementById('input-player-name').value.trim();
-                this.playerName = nameInput || 'MathChamp';
-                this.isHost = true;
-                this.isSolo = true;
-                this.roomCode = 'SOLO';
-
-                // Setup AI Bots
-                this.aiBots = [
-                    { id: 'bot-1', name: 'FactorBot Alpha', claimed: new Array(25).fill(false), score: 0, lines: 0, isBot: true },
-                    { id: 'bot-2', name: 'MathWhiz AI', claimed: new Array(25).fill(false), score: 0, lines: 0, isBot: true }
-                ];
-
-                this.setupGameUI();
-                this.showToast('Single Player Practice Mode Started!', 'info');
-            }
-
-            // --- GAME INITIALIZATION & UI SETUP ---
-            setupGameUI() {
-                // Switch View
-                document.getElementById('view-lobby').classList.add('hidden');
-                document.getElementById('view-game').classList.remove('hidden');
-                document.getElementById('view-game').classList.add('flex');
-
-                // Header Badge
-                const roomBadge = document.getElementById('room-badge');
-                roomBadge.classList.remove('hidden');
-                roomBadge.classList.add('flex');
-                document.getElementById('room-badge-text').innerText = `ROOM: ${this.roomCode}`;
-
-                // Role Badge & Room Code
-                document.getElementById('role-badge-text').innerText = this.isHost ? (this.isSolo ? 'SOLO' : 'HOST') : 'PLAYER';
-                document.getElementById('role-badge-dot').className = `w-2.5 h-2.5 rounded-full ${this.isHost ? 'bg-cyan-400' : 'bg-emerald-400'}`;
-                document.getElementById('display-room-code').innerText = this.roomCode;
-
-                // Host Controls Visibility
-                const hostControls = document.getElementById('host-game-controls');
-                if (this.isHost) {
-                    hostControls.classList.remove('hidden');
-                    hostControls.classList.add('flex');
-                } else {
-                    hostControls.classList.add('hidden');
-                    hostControls.classList.remove('flex');
-                }
-
-                // Generate 5x5 Board
-                this.generateLocalBoard();
-                this.claimedIndices = new Array(25).fill(false);
-                this.localScore = 0;
-                this.completedLinesCount = 0;
-
-                // Initialize Players State
-                this.playersState = {};
-                const localId = this.peer ? this.peer.id : 'local-player';
-                this.playersState[localId] = {
-                    name: this.playerName,
-                    claimed: this.claimedIndices,
-                    score: 0,
-                    lines: 0,
-                    isHost: this.isHost
-                };
-
-                if (this.isSolo) {
-                    this.aiBots.forEach(bot => {
-                        this.playersState[bot.id] = {
-                            name: bot.name,
-                            claimed: bot.claimed,
-                            score: 0,
-                            lines: 0,
-                            isBot: true
-                        };
-                    });
-                }
-
-                this.renderBoard();
-                this.renderOpponents();
-                this.updateScoreUI();
-
-                if (this.isHost && !this.targetNumber) {
-                    this.rollTargetNumber();
-                }
-            }
-
-            // Generate 25 numbers for the 5x5 BINGO grid
-            generateLocalBoard() {
-                // Balanced selection of factors and composite numbers (1 to 30)
-                const coreFactors = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12];
-                const upperComposites = [14, 15, 16, 18, 20, 21, 24, 25, 27, 28, 30, 32, 36];
-                
-                let pool = Array.from(new Set([...coreFactors, ...upperComposites]));
-                // Shuffle pool
-                pool.sort(() => Math.random() - 0.5);
-
-                // Select top 25
-                this.localBoard = pool.slice(0, 25);
-                // Ensure 1 is present in board
-                if (!this.localBoard.includes(1)) {
-                    this.localBoard[0] = 1;
-                }
-                // Shuffle again
-                this.localBoard.sort(() => Math.random() - 0.5);
-            }
-
-            renderBoard() {
-                const grid = document.getElementById('bingo-grid');
-                grid.innerHTML = '';
-
-                this.localBoard.forEach((num, index) => {
-                    const isClaimed = this.claimedIndices[index];
-                    const isFactorMatch = this.targetNumber && (this.targetNumber % num === 0) && !isClaimed;
-
-                    const tile = document.createElement('button');
-                    tile.dataset.index = index;
-                    tile.onclick = () => this.handleTileClick(index, num);
-
-                    let baseClasses = "relative flex flex-col items-center justify-center rounded-xl font-black text-lg sm:text-2xl transition-all transform duration-200 border shadow-md ";
-
-                    if (isClaimed) {
-                        baseClasses += "bg-gradient-to-tr from-emerald-600 to-teal-500 text-white border-emerald-400/60 shadow-emerald-500/20 scale-95 cursor-default ";
-                    } else if (isFactorMatch) {
-                        baseClasses += "bg-slate-900 hover:bg-slate-800 text-cyan-300 border-cyan-400 animate-pulse ring-2 ring-cyan-400/50 hover:scale-105 cursor-pointer ";
-                    } else {
-                        baseClasses += "bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800 hover:border-slate-700 hover:scale-105 cursor-pointer ";
-                    }
-
-                    tile.className = baseClasses;
-
-                    tile.innerHTML = `
-                        <span>${num}</span>
-                        ${isClaimed ? '<span class="absolute bottom-1 right-1 text-[10px] text-emerald-200">✓</span>' : ''}
-                    `;
-
-                    grid.appendChild(tile);
-                });
-            }
-
-            // --- GAMEPLAY MATH & ACTIONS ---
-            handleTileClick(index, num) {
-                if (this.claimedIndices[index]) return; // Already claimed
-
-                if (!this.targetNumber) {
-                    this.showToast('Wait for target roll!', 'info');
-                    return;
-                }
-
-                // Mathematical Factor Verification
-                if (this.targetNumber % num === 0) {
-                    // Valid Factor!
-                    this.claimedIndices[index] = true;
-                    sound.playMatch();
-
-                    // Points calculation
-                    this.localScore += 50;
-
-                    // Check Lines completed
-                    this.checkBingoLines();
-                    this.renderBoard();
-                    this.updateScoreUI();
-
-                    // Sync state with Host / Room
-                    this.syncLocalState();
-
-                    this.showToast(`Correct! ${num} is a factor of ${this.targetNumber}! (+50 pts)`, 'success');
-                } else {
-                    // Invalid Choice
-                    sound.playError();
-                    this.localScore = Math.max(0, this.localScore - 20);
-                    this.updateScoreUI();
-
-                    // Shake animation on tile
-                    const tileBtn = document.querySelector(`button[data-index='${index}']`);
-                    if (tileBtn) {
-                        tileBtn.classList.add('animate-shake', 'border-red-500', 'text-red-400');
-                        setTimeout(() => tileBtn.classList.remove('animate-shake', 'border-red-500', 'text-red-400'), 500);
-                    }
-
-                    this.showToast(`Oops! ${num} is NOT a factor of ${this.targetNumber}! (-20 pts)`, 'error');
-                }
-            }
-
-            passTurn() {
-                if (!this.targetNumber) return;
-
-                // Check if player actually had an unclaimed factor
-                const hasValidFactor = this.localBoard.some((num, idx) => !this.claimedIndices[idx] && (this.targetNumber % num === 0));
-
-                if (hasValidFactor) {
-                    sound.playError();
-                    this.showToast('Look closer! You still have a valid factor on your board!', 'error');
-                } else {
-                    sound.playMatch();
-                    this.localScore += 10;
-                    this.updateScoreUI();
-                    this.showToast('Turn passed. (+10 bonus for keen factor scanning!)', 'info');
-                }
-            }
-
-            checkBingoLines() {
-                const b = this.claimedIndices;
-                let lines = 0;
-
-                // 5 Rows
-                for (let r = 0; r < 5; r++) {
-                    if (b[r*5] && b[r*5+1] && b[r*5+2] && b[r*5+3] && b[r*5+4]) lines++;
-                }
-                // 5 Cols
-                for (let c = 0; c < 5; c++) {
-                    if (b[c] && b[c+5] && b[c+10] && b[c+15] && b[c+20]) lines++;
-                }
-                // 2 Diagonals
-                if (b[0] && b[6] && b[12] && b[18] && b[24]) lines++;
-                if (b[4] && b[8] && b[12] && b[16] && b[20]) lines++;
-
-                const previousLines = this.completedLinesCount;
-                this.completedLinesCount = lines;
-
-                if (lines > previousLines) {
-                    sound.playWin();
-                    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-                    this.showToast(`⚡ BINGO LINE COMPLETED! Total: ${lines} line(s)!`, 'success');
-
-                    if (lines >= 1 && previousLines === 0) {
-                        // Win Condition Triggered!
-                        this.triggerVictoryModal();
-                    }
-                }
-            }
-
-            // --- HOST / TARGET ROLL MANAGEMENT ---
-            rollTargetNumber() {
-                if (!this.isHost) return;
-
-                // Generate random target (1 to 100)
-                let newTarget = Math.floor(1 + Math.random() * 99);
-
-                this.targetNumber = newTarget;
-                this.targetHistory.unshift(newTarget);
-                if (this.targetHistory.length > 8) this.targetHistory.pop();
-
-                sound.playRoll();
-                this.broadcastOrUpdateTarget();
-
-                // Trigger AI turns if in solo mode
-                if (this.isSolo) {
-                    this.processAITurns();
-                }
-
-                // Reset timer if auto roll active
-                if (this.autoRollTimer) {
-                    this.resetAutoRollCountdown();
-                }
-            }
-
-            broadcastOrUpdateTarget() {
-                // Get list of factors for display hint
-                const factors = [];
-                for (let i = 1; i <= this.targetNumber; i++) {
-                    if (this.targetNumber % i === 0) factors.push(i);
-                }
-
-                this.updateTargetDisplay(this.targetNumber, factors);
-
-                if (this.peer && this.isHost && !this.isSolo) {
-                    // Broadcast target update to all connected players
-                    this.broadcast({
-                        type: 'TARGET_UPDATED',
-                        targetNumber: this.targetNumber,
-                        history: this.targetHistory,
-                        factors: factors
-                    });
-                }
-            }
-
-            updateTargetDisplay(target, factors) {
-                document.getElementById('target-number-text').innerText = target;
-                document.getElementById('target-number-inline').innerText = target;
-                document.getElementById('factor-hint-text').innerText = `Factors: ${factors.join(', ')}`;
-
-                // Update history chips
-                const chipsContainer = document.getElementById('target-history-chips');
-                chipsContainer.innerHTML = '';
-                this.targetHistory.forEach(num => {
-                    const chip = document.createElement('span');
-                    chip.className = "px-2 py-0.5 bg-slate-800 text-cyan-300 rounded font-mono font-bold text-xs border border-slate-700";
-                    chip.innerText = num;
-                    chipsContainer.appendChild(chip);
-                });
-
-                // Re-render board to highlight potential factors
-                this.renderBoard();
-            }
-
-            // --- AUTO ROLL TIMER ---
-            toggleAutoRoll(enabled) {
-                if (enabled) {
-                    this.autoRollIntervalSec = parseInt(document.getElementById('auto-roll-speed').value) || 30;
-                    this.startAutoRoll();
-                } else {
-                    this.stopAutoRoll();
-                }
-            }
-
-            updateAutoRollSpeed(val) {
-                this.autoRollIntervalSec = parseInt(val) || 30;
-                if (this.autoRollTimer) {
-                    this.resetAutoRollCountdown();
-                }
-            }
-
-            startAutoRoll() {
-                this.stopAutoRoll();
-                document.getElementById('timer-progress-wrap').classList.remove('hidden');
-                this.resetAutoRollCountdown();
-            }
-
-            stopAutoRoll() {
-                if (this.autoRollTimer) clearInterval(this.autoRollTimer);
-                if (this.countdownTimer) clearInterval(this.countdownTimer);
-                this.autoRollTimer = null;
-                this.countdownTimer = null;
-                document.getElementById('timer-progress-wrap').classList.add('hidden');
-            }
-
-            resetAutoRollCountdown() {
-                if (this.countdownTimer) clearInterval(this.countdownTimer);
-                this.remainingSeconds = this.autoRollIntervalSec;
-
-                const progressBar = document.getElementById('timer-progress-bar');
-                progressBar.style.width = '100%';
-
-                this.countdownTimer = setInterval(() => {
-                    this.remainingSeconds--;
-                    const pct = (this.remainingSeconds / this.autoRollIntervalSec) * 100;
-                    progressBar.style.width = `${pct}%`;
-
-                    if (this.remainingSeconds <= 0) {
-                        this.rollTargetNumber();
-                    }
-                }, 1000);
-            }
-
-            // --- PEERJS P2P NETWORK HANDLING ---
-            handleIncomingConnection(conn) {
-                conn.on('open', () => {
-                    console.log('Player connected:', conn.peer);
-                    this.connections[conn.peer] = conn;
-
-                    // Send current game state to new player
-                    const factors = [];
-                    if (this.targetNumber) {
-                        for (let i = 1; i <= this.targetNumber; i++) {
-                            if (this.targetNumber % i === 0) factors.push(i);
-                        }
-                    }
-
-                    conn.send({
-                        type: 'INIT_STATE',
-                        targetNumber: this.targetNumber,
-                        history: this.targetHistory,
-                        factors: factors,
-                        playersState: this.playersState
-                    });
-                });
-
-                conn.on('data', (data) => {
-                    this.handlePlayerAction(conn.peer, data);
-                });
-
-                conn.on('close', () => {
-                    delete this.connections[conn.peer];
-                    delete this.playersState[conn.peer];
-                    this.renderOpponents();
-                    this.broadcastPlayersState();
-                });
-            }
-
-            handlePlayerAction(peerId, data) {
-                if (data.type === 'JOIN_ROOM') {
-                    this.playersState[peerId] = {
-                        name: data.playerName,
-                        claimed: data.claimed || new Array(25).fill(false),
-                        score: 0,
-                        lines: 0,
-                        isHost: false
-                    };
-                    this.showToast(`${data.playerName} joined the room!`, 'info');
-                    this.renderOpponents();
-                    this.broadcastPlayersState();
-                } else if (data.type === 'UPDATE_PLAYER_STATE') {
-                    if (this.playersState[peerId]) {
-                        this.playersState[peerId].claimed = data.claimed;
-                        this.playersState[peerId].score = data.score;
-                        this.playersState[peerId].lines = data.lines;
-                        this.renderOpponents();
-                        this.broadcastPlayersState();
-                    }
-                }
-            }
-
-            handleHostData(data) {
-                if (data.type === 'INIT_STATE' || data.type === 'TARGET_UPDATED') {
-                    this.targetNumber = data.targetNumber;
-                    this.targetHistory = data.history || [];
-                    this.updateTargetDisplay(data.targetNumber, data.factors || []);
-                    if (data.playersState) {
-                        this.playersState = data.playersState;
-                        this.renderOpponents();
-                    }
-                } else if (data.type === 'PLAYERS_STATE_UPDATE') {
-                    this.playersState = data.playersState;
-                    this.renderOpponents();
-                }
-            }
-
-            broadcast(data) {
-                Object.values(this.connections).forEach(conn => {
-                    if (conn && conn.open) conn.send(data);
-                });
-            }
-
-            broadcastPlayersState() {
-                this.broadcast({
-                    type: 'PLAYERS_STATE_UPDATE',
-                    playersState: this.playersState
-                });
-            }
-
-            syncLocalState() {
-                const localId = this.peer ? this.peer.id : 'local-player';
-                if (this.playersState[localId]) {
-                    this.playersState[localId].claimed = this.claimedIndices;
-                    this.playersState[localId].score = this.localScore;
-                    this.playersState[localId].lines = this.completedLinesCount;
-                }
-
-                if (this.isHost) {
-                    this.renderOpponents();
-                    this.broadcastPlayersState();
-                } else if (this.connections['host']) {
-                    this.connections['host'].send({
-                        type: 'UPDATE_PLAYER_STATE',
-                        claimed: this.claimedIndices,
-                        score: this.localScore,
-                        lines: this.completedLinesCount
-                    });
-                }
-            }
-
-            // --- REAL-TIME OPPONENT DOT-CARD RENDERER ---
-            renderOpponents() {
-                const container = document.getElementById('opponents-list');
-                const badge = document.getElementById('player-count-badge');
-                container.innerHTML = '';
-
-                const localId = this.peer ? this.peer.id : 'local-player';
-                const entries = Object.entries(this.playersState);
-
-                badge.innerText = `${entries.length} Player${entries.length > 1 ? 's' : ''}`;
-
-                entries.forEach(([id, player]) => {
-                    const isSelf = id === localId;
-
-                    const card = document.createElement('div');
-                    card.className = `p-3.5 rounded-xl border transition ${isSelf ? 'bg-slate-800/80 border-cyan-500/40 ring-1 ring-cyan-500/30' : 'bg-slate-950/70 border-slate-800'}`;
-
-                    // Player Header
-                    let html = `
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center space-x-2">
-                                <span class="font-extrabold text-xs ${isSelf ? 'text-cyan-300' : 'text-slate-200'}">${player.name} ${isSelf ? '(You)' : ''}</span>
-                                <span class="text-[10px] px-2 py-0.5 rounded-full ${player.isHost ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-slate-800 text-slate-400'} font-semibold">
-                                    ${player.isHost ? 'Host' : (player.isBot ? 'AI Bot' : 'Player')}
-                                </span>
-                            </div>
-                            <div class="text-[11px] font-mono text-slate-400">
-                                <span class="text-emerald-400 font-bold">${player.score}</span> pts • <span class="text-cyan-400 font-bold">${player.lines}</span> lines
-                            </div>
-                        </div>
-
-                        <!-- 5x5 Live Dot-Matrix Grid -->
-                        <div class="grid grid-cols-5 gap-1.5 p-2 bg-slate-900 rounded-lg border border-slate-800/80 w-full max-w-[180px] mx-auto">
-                    `;
-
-                    // 25 Dot Cells
-                    for (let i = 0; i < 25; i++) {
-                        const isClaimed = player.claimed && player.claimed[i];
-                        html += `
-                            <div class="aspect-square rounded-full flex items-center justify-center transition-all duration-300 ${
-                                isClaimed 
-                                ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] scale-110' 
-                                : 'bg-slate-800 border border-slate-700/50'
-                            }"></div>
-                        `;
-                    }
-
-                    html += `</div>`;
-                    card.innerHTML = html;
-                    container.appendChild(card);
-                });
-            }
-
-            // --- AI BOTS FOR SOLO PRACTICE MODE ---
-            processAITurns() {
-                if (!this.targetNumber || !this.isSolo) return;
-
-                this.aiBots.forEach(bot => {
-                    // 70% probability AI finds valid factor within 2-4 seconds
-                    setTimeout(() => {
-                        if (Math.random() < 0.85) {
-                            // Find un-claimed index
-                            const unclaimed = [];
-                            bot.claimed.forEach((c, idx) => { if (!c) unclaimed.push(idx); });
-
-                            if (unclaimed.length > 0) {
-                                const pickIndex = unclaimed[Math.floor(Math.random() * unclaimed.length)];
-                                bot.claimed[pickIndex] = true;
-                                bot.score += 50;
-
-                                // Check AI lines
-                                const b = bot.claimed;
-                                let lines = 0;
-                                for (let r = 0; r < 5; r++) if (b[r*5] && b[r*5+1] && b[r*5+2] && b[r*5+3] && b[r*5+4]) lines++;
-                                for (let c = 0; c < 5; c++) if (b[c] && b[c+5] && b[c+10] && b[c+15] && b[c+20]) lines++;
-                                if (b[0] && b[6] && b[12] && b[18] && b[24]) lines++;
-                                if (b[4] && b[8] && b[12] && b[16] && b[20]) lines++;
-
-                                bot.lines = lines;
-                                this.playersState[bot.id] = { ...bot };
-                                this.renderOpponents();
-                            }
-                        }
-                    }, 1500 + Math.random() * 2500);
-                });
-            }
-
-            // --- UI HELPERS & CERTIFICATE ---
-            updateScoreUI() {
-                document.getElementById('player-score-text').innerText = this.localScore;
-                document.getElementById('player-lines-text').innerText = `${this.completedLinesCount} / 5`;
-            }
-
-            triggerVictoryModal() {
-                document.getElementById('cert-winner-name').innerText = this.playerName.toUpperCase();
-                document.getElementById('cert-date').innerText = new Date().toISOString().split('T')[0];
-                document.getElementById('cert-score').innerText = `${this.localScore} Pts`;
-                document.getElementById('cert-room').innerText = this.roomCode;
-
-                document.getElementById('certificate-modal').classList.remove('hidden');
-            }
-
-            closeCertificate() {
-                document.getElementById('certificate-modal').classList.add('hidden');
-            }
-
-            copyRoomCode() {
-                if (!this.roomCode) return;
-                navigator.clipboard ? navigator.clipboard.writeText(this.roomCode) : document.execCommand('copy');
-                this.showToast(`Room code ${this.roomCode} copied to clipboard!`, 'success');
-            }
-
-            showMathGuide() {
-                document.getElementById('modal-guide').classList.remove('hidden');
-            }
-
-            hideMathGuide() {
-                document.getElementById('modal-guide').classList.add('hidden');
-            }
-
-            leaveGame() {
-                this.goHome();
-                this.showToast('Left room', 'info');
-            }
-
-            showToast(message, type = 'info') {
-                const container = document.getElementById('toast-container');
-                const toast = document.createElement('div');
-
-                const bgColors = {
-                    success: 'bg-emerald-900/90 border-emerald-500/80 text-emerald-200',
-                    error: 'bg-rose-900/90 border-rose-500/80 text-rose-200',
-                    info: 'bg-cyan-900/90 border-cyan-500/80 text-cyan-200'
-                };
-
-                toast.className = `px-4 py-3 rounded-xl border shadow-xl text-xs font-bold transition-all duration-300 transform translate-x-10 pointer-events-auto flex items-center space-x-2 ${bgColors[type] || bgColors.info}`;
-                toast.innerHTML = `<span>${message}</span>`;
-
-                container.appendChild(toast);
-
-                setTimeout(() => toast.classList.remove('translate-x-10'), 10);
-                setTimeout(() => {
-                    toast.classList.add('opacity-0', 'translate-x-10');
-                    setTimeout(() => toast.remove(), 300);
-                }, 3500);
-            }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
         }
+      }
 
-        // Initialize App instance on load
-        let app;
-        window.addEventListener('DOMContentLoaded', () => {
-            app = new FactorBingoApp();
-            app.init();
+      toggleMute() {
+        this.muted = !this.muted;
+        document.getElementById('muteIcon').className = this.muted ? 'fa-solid fa-volume-xmark text-slate-500' : 'fa-solid fa-volume-high text-indigo-400';
+        document.getElementById('muteText').textContent = this.muted ? 'Muted' : 'Sound';
+      }
+
+      playRollTick() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.05);
+      }
+
+      playCorrectChime() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        [523.25, 659.25, 783.99].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+          gain.gain.setValueAtTime(0.2, now + idx * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.25);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + idx * 0.08);
+          osc.stop(now + idx * 0.08 + 0.25);
         });
-    </script>
+      }
+
+      playWrongBuzz() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(100, this.ctx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.2);
+      }
+
+      playBingoFanfare() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        const now = this.ctx.currentTime;
+        notes.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+          gain.gain.setValueAtTime(0.3, now + idx * 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.6);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + idx * 0.12);
+          osc.stop(now + idx * 0.12 + 0.6);
+        });
+      }
+    }
+
+    const sound = new SoundEngine();
+
+    /**
+     * Main Factor BINGO Application Class
+     */
+    class FactorBingoApp {
+      constructor() {
+        this.mode = 'IDLE'; // 'HOST', 'PLAYER', 'OFFLINE'
+        this.roomCode = null;
+        this.myPeerId = null;
+        this.myPlayerName = 'Player';
+        this.isHost = false;
+        
+        // PeerJS & BroadcastChannel Fallbacks
+        this.peer = null;
+        this.connections = {}; // Host connections map: peerId -> DataConnection
+        this.hostConn = null; // Player connection to Host
+        this.broadcastChannel = null;
+
+        // Game State
+        this.gameStarted = false;
+        this.roundNumber = 0;
+        this.currentTarget = null;
+        this.timerDuration = 30; // seconds
+        this.timerRemaining = 30;
+        this.timerInterval = null;
+        this.isPaused = false;
+
+        // Player Card & Score State
+        this.boardNumbers = []; // 25 numbers
+        this.boardClaimed = Array(25).fill(false); // boolean grid
+        this.playerScore = 0;
+
+        // Opponents State tracking map: peerId -> { name, claimed: Array(25), lines: 0 }
+        this.playersMap = {};
+
+        // Numbers with good factors suitable for target roll generation
+        this.targetPool = [12, 16, 18, 20, 24, 25, 28, 30, 32, 36, 40, 42, 45, 48, 50, 60, 64, 72, 80, 90, 100];
+      }
+
+      init() {
+        this.setupBroadcastChannel();
+        this.showLanding();
+      }
+
+      // Initialize local BroadcastChannel for multi-tab fallback
+      setupBroadcastChannel() {
+        try {
+          if ('BroadcastChannel' in window) {
+            this.broadcastChannel = new BroadcastChannel('factor_bingo_local_channel');
+            this.broadcastChannel.onmessage = (event) => this.handleIncomingMessage(event.data, 'BROADCAST');
+          }
+        } catch (e) {
+          console.warn('BroadcastChannel not supported:', e);
+        }
+      }
+
+      // UI View Switchers
+      hideAllViews() {
+        ['viewLanding', 'viewJoinForm', 'viewLobby', 'viewGameplay'].forEach(id => {
+          document.getElementById(id).classList.add('hidden');
+        });
+      }
+
+      showLanding() {
+        this.hideAllViews();
+        document.getElementById('viewLanding').classList.remove('hidden');
+        this.updateStatus('Offline', 'bg-slate-500');
+      }
+
+      showJoinForm() {
+        this.hideAllViews();
+        document.getElementById('viewJoinForm').classList.remove('hidden');
+      }
+
+      updateStatus(text, dotClass) {
+        document.getElementById('statusText').textContent = text;
+        document.getElementById('statusDot').className = `w-2.5 h-2.5 rounded-full ${dotClass}`;
+      }
+
+      // Generate 4-digit room code
+      generateRoomCode() {
+        return Math.floor(1000 + Math.random() * 9000).toString();
+      }
+
+      // --- HOST SETUP ---
+      setupHostLobby() {
+        this.isHost = true;
+        this.mode = 'HOST';
+        this.roomCode = this.generateRoomCode();
+        this.myPlayerName = 'Host';
+        this.myPeerId = `factor-bingo-${this.roomCode}`;
+
+        document.getElementById('lobbyRoomCode').textContent = this.roomCode;
+        document.getElementById('playerWaitingNotice').classList.add('hidden');
+        document.getElementById('hostLobbyControls').classList.remove('hidden');
+        document.getElementById('lobbyTimerConfig').classList.remove('hidden');
+        document.getElementById('hostForceRollBtn').classList.remove('hidden');
+        document.getElementById('hostPauseBtn').classList.remove('hidden');
+
+        // Reset player map with Host self
+        this.playersMap = {};
+        this.playersMap['HOST_SELF'] = {
+          name: 'Host (You)',
+          claimed: Array(25).fill(false),
+          lines: 0
+        };
+
+        this.updateLobbyPlayerList();
+        this.hideAllViews();
+        document.getElementById('viewLobby').classList.remove('hidden');
+
+        this.initPeerJS(this.myPeerId);
+      }
+
+      // --- PLAYER JOIN SETUP ---
+      connectAsPlayer() {
+        const nameInput = document.getElementById('inputPlayerName').value.trim();
+        const codeInput = document.getElementById('inputRoomCode').value.trim();
+
+        if (!nameInput) {
+          alert('Please enter your name.');
+          return;
+        }
+        if (!codeInput || codeInput.length !== 4) {
+          alert('Please enter a valid 4-digit room code.');
+          return;
+        }
+
+        this.isHost = false;
+        this.mode = 'PLAYER';
+        this.myPlayerName = nameInput;
+        this.roomCode = codeInput;
+        this.myPeerId = `player-${Math.floor(Math.random() * 89999 + 10000)}`;
+
+        document.getElementById('lobbyRoomCode').textContent = this.roomCode;
+        document.getElementById('playerWaitingNotice').classList.remove('hidden');
+        document.getElementById('hostLobbyControls').classList.add('hidden');
+        document.getElementById('lobbyTimerConfig').classList.add('hidden');
+
+        this.playersMap = {};
+        this.playersMap[this.myPeerId] = {
+          name: `${this.myPlayerName} (You)`,
+          claimed: Array(25).fill(false),
+          lines: 0
+        };
+
+        this.updateLobbyPlayerList();
+        this.hideAllViews();
+        document.getElementById('viewLobby').classList.remove('hidden');
+
+        this.updateStatus('Connecting to Peer network...', 'bg-amber-500 animate-pulse');
+
+        // Init PeerJS and attempt host connection
+        this.initPeerJS(this.myPeerId, () => {
+          const targetHostPeerId = `factor-bingo-${this.roomCode}`;
+          this.connectToPeerHost(targetHostPeerId);
+        });
+
+        // Also send BroadcastChannel hello for instant local tab testing fallback
+        if (this.broadcastChannel) {
+          this.broadcastChannel.postMessage({
+            type: 'PLAYER_JOIN_REQ',
+            senderId: this.myPeerId,
+            playerName: this.myPlayerName,
+            roomCode: this.roomCode
+          });
+        }
+      }
+
+      // --- PEERJS ENGINE WITH ICE STUN SERVERS ---
+      initPeerJS(customId, onOpenCallback) {
+        if (this.peer) {
+          try { this.peer.destroy(); } catch (e) {}
+        }
+
+        const peerConfig = {
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' },
+              { urls: 'stun:stun2.l.google.com:19302' },
+              { urls: 'stun:stun3.l.google.com:19302' },
+              { urls: 'stun:stun4.l.google.com:19302' }
+            ]
+          }
+        };
+
+        this.peer = new Peer(customId, peerConfig);
+
+        this.peer.on('open', (id) => {
+          console.log('PeerJS server connected. My ID:', id);
+          if (this.isHost) {
+            this.updateStatus('Room Live (Waiting for Players)', 'bg-emerald-500');
+          } else {
+            this.updateStatus('Connected to Peer Network', 'bg-blue-500');
+          }
+          if (onOpenCallback) onOpenCallback();
+        });
+
+        this.peer.on('connection', (conn) => {
+          this.handleIncomingPeerConnection(conn);
+        });
+
+        this.peer.on('error', (err) => {
+          console.warn('PeerJS Error:', err.type, err);
+          this.updateStatus('Peer Fallback Mode (Broadcast)', 'bg-amber-500');
+        });
+      }
+
+      connectToPeerHost(hostPeerId) {
+        if (!this.peer) return;
+        const conn = this.peer.connect(hostPeerId, { reliable: true });
+
+        conn.on('open', () => {
+          this.hostConn = conn;
+          this.updateStatus('Connected to Host!', 'bg-emerald-500');
+          // Handshake send name & room
+          conn.send({
+            type: 'PLAYER_JOIN_REQ',
+            senderId: this.myPeerId,
+            playerName: this.myPlayerName,
+            roomCode: this.roomCode
+          });
+        });
+
+        conn.on('data', (data) => {
+          this.handleIncomingMessage(data, conn.peer);
+        });
+
+        conn.on('close', () => {
+          this.updateStatus('Host Disconnected', 'bg-rose-500');
+        });
+      }
+
+      handleIncomingPeerConnection(conn) {
+        conn.on('open', () => {
+          this.connections[conn.peer] = conn;
+        });
+
+        conn.on('data', (data) => {
+          this.handleIncomingMessage(data, conn.peer);
+        });
+
+        conn.on('close', () => {
+          delete this.connections[conn.peer];
+          delete this.playersMap[conn.peer];
+          this.updateLobbyPlayerList();
+          this.renderOpponentMatrices();
+          this.broadcastState();
+        });
+      }
+
+      // --- NETWORK MESSAGE ROUTER ---
+      handleIncomingMessage(msg, originPeerId) {
+        if (!msg || typeof msg !== 'object') return;
+
+        // Filter out broadcast messages meant for other room codes
+        if (msg.roomCode && msg.roomCode !== this.roomCode) return;
+
+        switch (msg.type) {
+          case 'PLAYER_JOIN_REQ':
+            if (this.isHost) {
+              this.playersMap[msg.senderId] = {
+                name: msg.playerName,
+                claimed: Array(25).fill(false),
+                lines: 0
+              };
+              this.updateLobbyPlayerList();
+              this.broadcastState();
+            }
+            break;
+
+          case 'LOBBY_STATE_SYNC':
+            if (!this.isHost) {
+              this.playersMap = msg.playersMap;
+              this.timerDuration = msg.timerDuration || 30;
+              this.updateLobbyPlayerList();
+            }
+            break;
+
+          case 'GAME_STARTED':
+            this.handleGameStartSignal(msg);
+            break;
+
+          case 'NEW_ROLL_TARGET':
+            this.handleNewRollSignal(msg);
+            break;
+
+          case 'PLAYER_BOARD_UPDATE':
+            if (this.playersMap[msg.senderId]) {
+              this.playersMap[msg.senderId].claimed = msg.claimed;
+              this.playersMap[msg.senderId].lines = msg.lines;
+              this.renderOpponentMatrices();
+            }
+            if (this.isHost) {
+              this.broadcastToAll({
+                type: 'OPPONENT_UPDATE',
+                senderId: msg.senderId,
+                claimed: msg.claimed,
+                lines: msg.lines
+              });
+            }
+            break;
+
+          case 'OPPONENT_UPDATE':
+            if (!this.isHost && msg.senderId !== this.myPeerId) {
+              if (!this.playersMap[msg.senderId]) {
+                this.playersMap[msg.senderId] = { name: 'Player', claimed: msg.claimed, lines: msg.lines };
+              } else {
+                this.playersMap[msg.senderId].claimed = msg.claimed;
+                this.playersMap[msg.senderId].lines = msg.lines;
+              }
+              this.renderOpponentMatrices();
+            }
+            break;
+
+          case 'BINGO_WIN':
+            sound.playBingoFanfare();
+            this.showWinModal(msg.winnerName, msg.roundNumber);
+            break;
+        }
+      }
+
+      // Broadcast state to all connected peers & local BroadcastChannel
+      broadcastToAll(data) {
+        data.roomCode = this.roomCode;
+        // Direct PeerJS connections
+        Object.values(this.connections).forEach(conn => {
+          if (conn && conn.open) conn.send(data);
+        });
+        // Host connection if player
+        if (this.hostConn && this.hostConn.open) {
+          this.hostConn.send(data);
+        }
+        // BroadcastChannel fallback
+        if (this.broadcastChannel) {
+          this.broadcastChannel.postMessage(data);
+        }
+      }
+
+      broadcastState() {
+        if (!this.isHost) return;
+        this.broadcastToAll({
+          type: 'LOBBY_STATE_SYNC',
+          playersMap: this.playersMap,
+          timerDuration: this.timerDuration
+        });
+      }
+
+      updateTimerSetting(val) {
+        this.timerDuration = parseInt(val, 10);
+        if (this.isHost) this.broadcastState();
+      }
+
+      copyRoomCode() {
+        if (!this.roomCode) return;
+        const tempInput = document.createElement('input');
+        tempInput.value = this.roomCode;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempInput);
+        alert(`Room Code ${this.roomCode} copied to clipboard!`);
+      }
+
+      updateLobbyPlayerList() {
+        const container = document.getElementById('lobbyPlayersList');
+        container.innerHTML = '';
+
+        const playerIds = Object.keys(this.playersMap);
+        document.getElementById('connectedPlayerCount').textContent = playerIds.length;
+
+        playerIds.forEach(id => {
+          const p = this.playersMap[id];
+          const badge = document.createElement('div');
+          badge.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center space-x-3 shadow';
+          badge.innerHTML = `
+            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center font-bold text-xs text-white">
+              ${p.name.charAt(0).toUpperCase()}
+            </div>
+            <div class="flex-1 truncate">
+              <span class="text-xs font-bold text-white block truncate">${p.name}</span>
+              <span class="text-[10px] text-emerald-400 flex items-center space-x-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Ready</span>
+              </span>
+            </div>
+          `;
+          container.appendChild(badge);
+        });
+      }
+
+      // --- GAME LAUNCH & FIRST ROLL ---
+      startMultiplayerGame() {
+        if (!this.isHost) return;
+
+        this.gameStarted = true;
+        this.roundNumber = 1;
+        this.currentTarget = this.getRandomTargetNumber();
+
+        // Broadcast game start signal with initial target roll
+        this.broadcastToAll({
+          type: 'GAME_STARTED',
+          roundNumber: this.roundNumber,
+          currentTarget: this.currentTarget,
+          timerDuration: this.timerDuration
+        });
+
+        this.setupGameplayUI();
+        this.startRoundTimer();
+      }
+
+      handleGameStartSignal(msg) {
+        this.gameStarted = true;
+        this.roundNumber = msg.roundNumber;
+        this.currentTarget = msg.currentTarget;
+        this.timerDuration = msg.timerDuration || 30;
+
+        this.setupGameplayUI();
+        this.startRoundTimer();
+      }
+
+      // Offline Practice Mode vs 3 AI Players
+      startOfflinePractice() {
+        this.mode = 'OFFLINE';
+        this.isHost = true;
+        this.gameStarted = true;
+        this.roomCode = 'SOLO';
+        this.myPlayerName = 'You';
+
+        this.playersMap = {
+          'SOLO_USER': { name: 'You', claimed: Array(25).fill(false), lines: 0 },
+          'AI_1': { name: 'MathBot Alpha', claimed: Array(25).fill(false), lines: 0 },
+          'AI_2': { name: 'FactorBot', claimed: Array(25).fill(false), lines: 0 },
+          'AI_3': { name: 'QuickCalc', claimed: Array(25).fill(false), lines: 0 }
+        };
+
+        this.myPeerId = 'SOLO_USER';
+        this.roundNumber = 1;
+        this.timerDuration = 30;
+        this.currentTarget = this.getRandomTargetNumber();
+
+        document.getElementById('hostForceRollBtn').classList.remove('hidden');
+        document.getElementById('hostPauseBtn').classList.remove('hidden');
+
+        this.setupGameplayUI();
+        this.startRoundTimer();
+      }
+
+      // Generate 5x5 Board numbers (1 to 25 shuffled or randomized numbers up to 36)
+      generateBoardNumbers() {
+        // Pool of numbers 1..36 with nice factor properties
+        const pool = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 21, 24, 25, 27, 28, 30, 32, 35, 36];
+        // Shuffle
+        const shuffled = [...pool].sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, 25);
+      }
+
+      getRandomTargetNumber() {
+        return this.targetPool[Math.floor(Math.random() * this.targetPool.length)];
+      }
+
+      setupGameplayUI() {
+        this.hideAllViews();
+        document.getElementById('viewGameplay').classList.remove('hidden');
+
+        // Generate player board
+        this.boardNumbers = this.generateBoardNumbers();
+        this.boardClaimed = Array(25).fill(false);
+        this.playerScore = 0;
+
+        this.renderBingoCard();
+        this.renderOpponentMatrices();
+        this.updateTargetDisplay();
+      }
+
+      updateTargetDisplay() {
+        document.getElementById('targetNumber').textContent = this.currentTarget;
+        document.getElementById('targetPromptNum').textContent = this.currentTarget;
+        document.getElementById('roundCounter').textContent = `#${this.roundNumber}`;
+      }
+
+      // Render main 5x5 BINGO board
+      renderBingoCard() {
+        const grid = document.getElementById('bingoGrid');
+        grid.innerHTML = '';
+
+        this.boardNumbers.forEach((val, idx) => {
+          const btn = document.createElement('button');
+          const isClaimed = this.boardClaimed[idx];
+
+          btn.className = `card-cell relative rounded-xl font-black text-xl sm:text-2xl flex items-center justify-center transition-all duration-200 border shadow-md ${
+            isClaimed
+              ? 'bg-gradient-to-tr from-emerald-600 to-teal-500 border-emerald-400 text-white scale-95 shadow-emerald-500/20'
+              : 'bg-slate-950 hover:bg-slate-800 border-slate-800 hover:border-indigo-500/50 text-slate-100 hover:scale-105'
+          }`;
+
+          btn.innerHTML = `
+            <span>${val}</span>
+            ${isClaimed ? '<i class="fa-solid fa-check text-xs absolute top-2 right-2 text-emerald-200"></i>' : ''}
+          `;
+
+          btn.onclick = () => this.handleCellClick(idx, val);
+          grid.appendChild(btn);
+        });
+
+        document.getElementById('playerScoreBadge').textContent = `${this.playerScore} Lines`;
+      }
+
+      // Render 5x5 Dot Matrix tracking cards for each opponent
+      renderOpponentMatrices() {
+        const container = document.getElementById('opponentsMatrixContainer');
+        container.innerHTML = '';
+
+        Object.keys(this.playersMap).forEach(id => {
+          // Skip rendering self in opponent panel unless in Host view
+          const p = this.playersMap[id];
+          const isSelf = (id === this.myPeerId || id === 'HOST_SELF');
+
+          const card = document.createElement('div');
+          card.className = `bg-slate-950 border ${isSelf ? 'border-indigo-500/40 bg-indigo-950/20' : 'border-slate-800'} rounded-xl p-3 flex items-center justify-between space-x-3`;
+
+          let dotsHtml = '<div class="grid grid-cols-5 gap-1 w-20 h-20 bg-slate-900 p-1.5 rounded-lg border border-slate-800">';
+          for (let i = 0; i < 25; i++) {
+            const active = p.claimed && p.claimed[i];
+            dotsHtml += `<div class="matrix-dot rounded-sm ${active ? 'bg-emerald-400 active' : 'bg-slate-800'}"></div>`;
+          }
+          dotsHtml += '</div>';
+
+          card.innerHTML = `
+            <div class="flex-1 truncate">
+              <div class="flex items-center space-x-2">
+                <span class="font-bold text-xs text-white truncate">${p.name}</span>
+                ${isSelf ? '<span class="text-[10px] bg-indigo-500/30 text-indigo-300 font-extrabold px-1.5 py-0.5 rounded">YOU</span>' : ''}
+              </div>
+              <div class="text-[11px] text-slate-400 mt-1 flex items-center space-x-2">
+                <span>Lines: <strong class="text-emerald-400">${p.lines || 0}</strong></span>
+              </div>
+            </div>
+            ${dotsHtml}
+          `;
+
+          container.appendChild(card);
+        });
+      }
+
+      // Check math and handle player cell click
+      handleCellClick(index, value) {
+        if (this.boardClaimed[index]) return; // Already claimed
+
+        // Factor math check: target % value === 0
+        if (this.currentTarget % value === 0) {
+          // Correct Factor!
+          sound.playCorrectChime();
+          this.boardClaimed[index] = true;
+          this.renderBingoCard();
+
+          // Update lines & notify host/peers
+          this.playerScore = this.calculateBingoLines(this.boardClaimed);
+          document.getElementById('playerScoreBadge').textContent = `${this.playerScore} Lines`;
+
+          // Broadcast board update
+          this.broadcastBoardUpdate();
+
+          // Check Win Condition (1 or more complete BINGO lines)
+          if (this.playerScore > 0) {
+            this.triggerBingoWin();
+          }
+        } else {
+          // Incorrect Factor!
+          sound.playWrongBuzz();
+          const grid = document.getElementById('bingoGrid');
+          const cell = grid.children[index];
+          if (cell) {
+            cell.classList.add('animate-shake', 'border-rose-500', 'bg-rose-950/40');
+            setTimeout(() => {
+              cell.classList.remove('animate-shake', 'border-rose-500', 'bg-rose-950/40');
+            }, 400);
+          }
+        }
+      }
+
+      passTurn() {
+        sound.playRollTick();
+        // Optional visual toast or sound
+      }
+
+      broadcastBoardUpdate() {
+        const myKey = this.isHost ? (this.mode === 'OFFLINE' ? 'SOLO_USER' : 'HOST_SELF') : this.myPeerId;
+        if (this.playersMap[myKey]) {
+          this.playersMap[myKey].claimed = this.boardClaimed;
+          this.playersMap[myKey].lines = this.playerScore;
+        }
+        this.renderOpponentMatrices();
+
+        this.broadcastToAll({
+          type: 'PLAYER_BOARD_UPDATE',
+          senderId: myKey,
+          claimed: this.boardClaimed,
+          lines: this.playerScore
+        });
+      }
+
+      // Calculate complete 5x5 BINGO lines (5 rows, 5 columns, 2 diagonals)
+      calculateBingoLines(grid) {
+        let lines = 0;
+
+        // Rows
+        for (let r = 0; r < 5; r++) {
+          if ([0,1,2,3,4].every(c => grid[r * 5 + c])) lines++;
+        }
+        // Columns
+        for (let c = 0; c < 5; c++) {
+          if ([0,1,2,3,4].every(r => grid[r * 5 + c])) lines++;
+        }
+        // Diagonals
+        if ([0, 6, 12, 18, 24].every(idx => grid[idx])) lines++;
+        if ([4, 8, 12, 16, 20].every(idx => grid[idx])) lines++;
+
+        return lines;
+      }
+
+      triggerBingoWin() {
+        sound.playBingoFanfare();
+        const winnerName = this.myPlayerName;
+
+        this.broadcastToAll({
+          type: 'BINGO_WIN',
+          winnerName: winnerName,
+          roundNumber: this.roundNumber
+        });
+
+        this.showWinModal(winnerName, this.roundNumber);
+      }
+
+      showWinModal(winnerName, roundNum) {
+        document.getElementById('winnerName').textContent = winnerName;
+        document.getElementById('winPlayerName').textContent = winnerName;
+        document.getElementById('winRoundCount').textContent = roundNum;
+        document.getElementById('winModal').classList.remove('hidden');
+
+        // Confetti celebration
+        if (typeof confetti === 'function') {
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 }
+          });
+        }
+      }
+
+      closeWinModal() {
+        document.getElementById('winModal').classList.add('hidden');
+      }
+
+      // --- TIMED ROLLS SYSTEM ---
+      startRoundTimer() {
+        if (this.timerInterval) clearInterval(this.timerInterval);
+        this.timerRemaining = this.timerDuration;
+        this.updateTimerUI();
+
+        this.timerInterval = setInterval(() => {
+          if (this.isPaused) return;
+
+          this.timerRemaining--;
+          this.updateTimerUI();
+
+          if (this.timerRemaining <= 0) {
+            if (this.isHost) {
+              this.hostTriggerRoll();
+            }
+          }
+        }, 1000);
+      }
+
+      updateTimerUI() {
+        document.getElementById('timerSeconds').textContent = `${this.timerRemaining}s`;
+        const percentage = Math.max(0, (this.timerRemaining / this.timerDuration) * 100);
+        document.getElementById('timerProgressBar').style.width = `${percentage}%`;
+      }
+
+      hostTriggerRoll() {
+        if (!this.isHost && this.mode !== 'OFFLINE') return;
+
+        sound.playRollTick();
+        this.roundNumber++;
+        this.currentTarget = this.getRandomTargetNumber();
+
+        // If offline mode, simulate AI clicks periodically
+        if (this.mode === 'OFFLINE') {
+          this.simulateAITurns();
+        }
+
+        this.broadcastToAll({
+          type: 'NEW_ROLL_TARGET',
+          roundNumber: this.roundNumber,
+          currentTarget: this.currentTarget,
+          timerDuration: this.timerDuration
+        });
+
+        this.updateTargetDisplay();
+        this.startRoundTimer();
+      }
+
+      handleNewRollSignal(msg) {
+        sound.playRollTick();
+        this.roundNumber = msg.roundNumber;
+        this.currentTarget = msg.currentTarget;
+        this.timerDuration = msg.timerDuration || 30;
+
+        this.updateTargetDisplay();
+        this.startRoundTimer();
+      }
+
+      togglePauseGame() {
+        this.isPaused = !this.isPaused;
+        const icon = document.getElementById('pauseIcon');
+        icon.className = this.isPaused ? 'fa-solid fa-play text-emerald-400' : 'fa-solid fa-pause';
+      }
+
+      // AI Simulation logic for Practice Mode
+      simulateAITurns() {
+        ['AI_1', 'AI_2', 'AI_3'].forEach(aiId => {
+          const ai = this.playersMap[aiId];
+          if (!ai) return;
+
+          // AI delay between 2 to 8 seconds
+          const delay = Math.floor(2000 + Math.random() * 6000);
+          setTimeout(() => {
+            if (!this.gameStarted) return;
+            // AI picks a random unclaimed index
+            const unclaimedIndices = ai.claimed.map((c, i) => c ? null : i).filter(v => v !== null);
+            if (unclaimedIndices.length > 0 && Math.random() > 0.4) {
+              const randomIndex = unclaimedIndices[Math.floor(Math.random() * unclaimedIndices.length)];
+              ai.claimed[randomIndex] = true;
+              ai.lines = this.calculateBingoLines(ai.claimed);
+              this.renderOpponentMatrices();
+            }
+          }, delay);
+        });
+      }
+    }
+
+    // Initialize Global App Instance
+    const app = new FactorBingoApp();
+    window.onload = () => app.init();
+  </script>
 </body>
 </html>
