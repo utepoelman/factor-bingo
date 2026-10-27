@@ -117,6 +117,10 @@
             <h3 class="text-xl font-bold text-white">Host a Game</h3>
             <p class="text-sm text-slate-400 mt-1">Create a 4-digit room code, manage players, and trigger rolls.</p>
           </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Your Name</label>
+            <input type="text" id="inputHostName" placeholder="e.g. Ms Smith" maxlength="12" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500 font-medium">
+          </div>
           <button onclick="app.setupHostLobby()" class="w-full py-3 px-4 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition flex items-center justify-center space-x-2">
             <span>Create Room</span>
             <i class="fa-solid fa-arrow-right text-sm"></i>
@@ -210,13 +214,7 @@
         </div>
 
         <!-- Connection Message for Players -->
-        <div id="playerWaitingNotice" class="hidden bg-purple-950/40 border border-purple-500/30 rounded-xl p-4 text-center space-y-2">
-          <div class="flex items-center justify-center space-x-2 text-purple-300 font-bold">
-            <i class="fa-solid fa-circle-notch fa-spin"></i>
-            <span>Connected to Host! Waiting for host to start the game...</span>
-          </div>
-          <p class="text-xs text-slate-400">Get ready to calculate factors when Roll #1 begins!</p>
-        </div>
+        <div id="playerWaitingNotice" class="hidden border rounded-xl p-4 text-center space-y-2"></div>
 
         <!-- Joined Players Grid -->
         <div class="space-y-3">
@@ -266,7 +264,7 @@
                 <span id="roundCounter" class="text-xs font-bold px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">#1</span>
               </div>
               <h3 id="targetPrompt" class="text-lg font-bold text-white mt-0.5">Find a Factor of <span id="targetPromptNum" class="text-indigo-400">--</span></h3>
-              <p class="text-xs text-slate-400">Tap a card number that divides evenly into the target!</p>
+              <p id="roundHint" class="text-xs text-slate-400">Tap ONE card number that divides evenly into the target!</p>
             </div>
           </div>
 
@@ -394,6 +392,26 @@
 
   <!-- APPLICATION JAVASCRIPT LOGIC -->
   <script>
+    // ICE servers. STUN alone cannot get through many school/corporate networks;
+    // TURN relays traffic (including over TCP port 443) so connections still work.
+    // The openrelay credentials below are a free shared service and may be rate-limited.
+    // For a reliable classroom setup, create a free account at metered.ca (or similar)
+    // and replace the TURN entries with your own credentials.
+    const ICE_SERVERS = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:global.stun.twilio.com:3478' },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+    ];
+    const PEER_PREFIX = 'fbingo-v2-';
+    const FREE_INDEX = 12; // centre of the 5x5 board
+
+    function esc(str) {
+      return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
     /**
      * Web Audio API Synthesizer Sound Engine
      */
@@ -520,6 +538,9 @@
         this.timerRemaining = 30;
         this.timerInterval = null;
         this.isPaused = false;
+        this.claimedThisRound = false;
+        this.joinTimeout = null;
+        this.joinConfirmed = false;
 
         // Player Card & Score State
         this.boardNumbers = []; // 25 numbers
@@ -557,7 +578,37 @@
         });
       }
 
+      cleanupNetwork() {
+        clearTimeout(this.joinTimeout);
+        if (this.timerInterval) clearInterval(this.timerInterval);
+        this.timerInterval = null;
+        if (this.peer) { try { this.peer.destroy(); } catch (e) {} }
+        this.peer = null;
+        this.connections = {};
+        this.hostConn = null;
+        this.gameStarted = false;
+        this.joinConfirmed = false;
+        this.isPaused = false;
+        this.claimedThisRound = false;
+      }
+
+      newClaimed() {
+        const arr = Array(25).fill(false);
+        arr[FREE_INDEX] = true; // free centre square
+        return arr;
+      }
+
+      selfKey() {
+        if (this.mode === 'OFFLINE') return 'SOLO_USER';
+        if (this.mode === 'HOST') return 'HOST_SELF';
+        return this.myPeerId;
+      }
+
+      isSelfId(id) { return id === this.selfKey(); }
+
       showLanding() {
+        this.cleanupNetwork();
+        document.getElementById('winModal').classList.add('hidden');
         this.hideAllViews();
         document.getElementById('viewLanding').classList.remove('hidden');
         this.updateStatus('Offline', 'bg-slate-500');
@@ -580,11 +631,17 @@
 
       // --- HOST SETUP ---
       setupHostLobby() {
+        const hostName = document.getElementById('inputHostName').value.trim();
+        if (!hostName) {
+          alert('Please enter your name.');
+          return;
+        }
+        this.cleanupNetwork();
         this.isHost = true;
         this.mode = 'HOST';
         this.roomCode = this.generateRoomCode();
-        this.myPlayerName = 'Host';
-        this.myPeerId = `factor-bingo-${this.roomCode}`;
+        this.myPlayerName = hostName;
+        this.myPeerId = `${PEER_PREFIX}${this.roomCode}`;
 
         document.getElementById('lobbyRoomCode').textContent = this.roomCode;
         document.getElementById('playerWaitingNotice').classList.add('hidden');
@@ -596,8 +653,8 @@
         // Reset player map with Host self
         this.playersMap = {};
         this.playersMap['HOST_SELF'] = {
-          name: 'Host (You)',
-          claimed: Array(25).fill(false),
+          name: this.myPlayerName,
+          claimed: this.newClaimed(),
           lines: 0
         };
 
@@ -622,6 +679,7 @@
           return;
         }
 
+        this.cleanupNetwork();
         this.isHost = false;
         this.mode = 'PLAYER';
         this.myPlayerName = nameInput;
@@ -629,14 +687,15 @@
         this.myPeerId = `player-${Math.floor(Math.random() * 89999 + 10000)}`;
 
         document.getElementById('lobbyRoomCode').textContent = this.roomCode;
-        document.getElementById('playerWaitingNotice').classList.remove('hidden');
         document.getElementById('hostLobbyControls').classList.add('hidden');
         document.getElementById('lobbyTimerConfig').classList.add('hidden');
+        document.getElementById('hostForceRollBtn').classList.add('hidden');
+        document.getElementById('hostPauseBtn').classList.add('hidden');
 
         this.playersMap = {};
         this.playersMap[this.myPeerId] = {
-          name: `${this.myPlayerName} (You)`,
-          claimed: Array(25).fill(false),
+          name: this.myPlayerName,
+          claimed: this.newClaimed(),
           lines: 0
         };
 
@@ -644,12 +703,15 @@
         this.hideAllViews();
         document.getElementById('viewLobby').classList.remove('hidden');
 
-        this.updateStatus('Connecting to Peer network...', 'bg-amber-500 animate-pulse');
+        this.setJoinNotice('connecting', `Connecting to room ${this.roomCode}...`, 'Contacting the game server and the host.');
+        this.updateStatus('Connecting...', 'bg-amber-500 animate-pulse');
+
+        // Give up with a helpful message if nothing happens
+        this.joinTimeout = setTimeout(() => this.showJoinError('timeout'), 20000);
 
         // Init PeerJS and attempt host connection
         this.initPeerJS(this.myPeerId, () => {
-          const targetHostPeerId = `factor-bingo-${this.roomCode}`;
-          this.connectToPeerHost(targetHostPeerId);
+          this.connectToPeerHost(`${PEER_PREFIX}${this.roomCode}`);
         });
 
         // Also send BroadcastChannel hello for instant local tab testing fallback
@@ -663,6 +725,72 @@
         }
       }
 
+      setJoinNotice(kind, title, sub) {
+        const box = document.getElementById('playerWaitingNotice');
+        const styles = {
+          connecting: ['bg-amber-950/40 border-amber-500/30', 'text-amber-300', 'fa-solid fa-circle-notch fa-spin'],
+          connected:  ['bg-purple-950/40 border-purple-500/30', 'text-purple-300', 'fa-solid fa-circle-notch fa-spin'],
+          error:      ['bg-rose-950/40 border-rose-500/30', 'text-rose-300', 'fa-solid fa-triangle-exclamation']
+        };
+        const st = styles[kind];
+        box.className = `${st[0]} border rounded-xl p-4 text-center space-y-2`;
+        box.innerHTML = `
+          <div class="flex items-center justify-center space-x-2 ${st[1]} font-bold">
+            <i class="${st[2]}"></i><span>${esc(title)}</span>
+          </div>
+          <p class="text-xs text-slate-400">${esc(sub)}</p>
+          ${kind === 'error' ? `
+            <div class="flex justify-center gap-2 pt-2">
+              <button onclick="app.connectAsPlayer()" class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold">Try Again</button>
+              <button onclick="app.showLanding()" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold">Back</button>
+            </div>` : ''}
+        `;
+      }
+
+      markJoined() {
+        if (this.joinConfirmed) return;
+        this.joinConfirmed = true;
+        clearTimeout(this.joinTimeout);
+        this.setJoinNotice('connected', 'Connected to Host! Waiting for host to start the game...', 'Get ready to calculate factors when Roll #1 begins!');
+        this.updateStatus('Connected to Host!', 'bg-emerald-500');
+      }
+
+      showJoinError(reason) {
+        if (this.mode !== 'PLAYER' || this.joinConfirmed) return;
+        clearTimeout(this.joinTimeout);
+        const msgs = {
+          notfound: ['Room not found', `No host with code ${this.roomCode} was found. Check the code and make sure the host has created the room.`],
+          server:   ['Cannot reach the game server', 'The matchmaking server (PeerJS) could not be reached. This network may be blocking it. Try a different network or a phone hotspot.'],
+          timeout:  ['Could not connect to the host', 'Some school Wi-Fi networks block direct device-to-device connections. Try again, and check the room code is correct.'],
+          other:    ['Connection problem', 'Something went wrong while connecting. Please try again.']
+        };
+        const m = msgs[reason] || msgs.other;
+        this.setJoinNotice('error', m[0], m[1]);
+        this.updateStatus('Connection failed', 'bg-rose-500');
+      }
+
+      handlePeerError(err) {
+        const type = err && err.type;
+        if (this.mode === 'HOST') {
+          if (type === 'unavailable-id') {
+            // Another room on the shared server already uses this code: pick a new one
+            this.roomCode = this.generateRoomCode();
+            this.myPeerId = `${PEER_PREFIX}${this.roomCode}`;
+            document.getElementById('lobbyRoomCode').textContent = this.roomCode;
+            this.initPeerJS(this.myPeerId);
+          } else {
+            this.updateStatus('Server unreachable (others cannot join)', 'bg-rose-500');
+          }
+          return;
+        }
+        if (this.mode === 'PLAYER') {
+          if (type === 'peer-unavailable') this.showJoinError('notfound');
+          else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(type)) this.showJoinError('server');
+          else if (type === 'webrtc') this.showJoinError('timeout');
+          else this.showJoinError('other');
+        }
+      }
+
       // --- PEERJS ENGINE WITH ICE STUN SERVERS ---
       initPeerJS(customId, onOpenCallback) {
         if (this.peer) {
@@ -670,15 +798,8 @@
         }
 
         const peerConfig = {
-          config: {
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' },
-              { urls: 'stun:stun2.l.google.com:19302' },
-              { urls: 'stun:stun3.l.google.com:19302' },
-              { urls: 'stun:stun4.l.google.com:19302' }
-            ]
-          }
+          debug: 1,
+          config: { iceServers: ICE_SERVERS }
         };
 
         this.peer = new Peer(customId, peerConfig);
@@ -699,7 +820,7 @@
 
         this.peer.on('error', (err) => {
           console.warn('PeerJS Error:', err.type, err);
-          this.updateStatus('Peer Fallback Mode (Broadcast)', 'bg-amber-500');
+          this.handlePeerError(err);
         });
       }
 
@@ -709,7 +830,7 @@
 
         conn.on('open', () => {
           this.hostConn = conn;
-          this.updateStatus('Connected to Host!', 'bg-emerald-500');
+          this.markJoined();
           // Handshake send name & room
           conn.send({
             type: 'PLAYER_JOIN_REQ',
@@ -726,6 +847,8 @@
         conn.on('close', () => {
           this.updateStatus('Host Disconnected', 'bg-rose-500');
         });
+
+        conn.on('error', () => this.showJoinError('timeout'));
       }
 
       handleIncomingPeerConnection(conn) {
@@ -757,8 +880,8 @@
           case 'PLAYER_JOIN_REQ':
             if (this.isHost) {
               this.playersMap[msg.senderId] = {
-                name: msg.playerName,
-                claimed: Array(25).fill(false),
+                name: String(msg.playerName || 'Player').slice(0, 12),
+                claimed: this.newClaimed(),
                 lines: 0
               };
               this.updateLobbyPlayerList();
@@ -768,6 +891,7 @@
 
           case 'LOBBY_STATE_SYNC':
             if (!this.isHost) {
+              this.markJoined();
               this.playersMap = msg.playersMap;
               this.timerDuration = msg.timerDuration || 30;
               this.updateLobbyPlayerList();
@@ -868,14 +992,15 @@
 
         playerIds.forEach(id => {
           const p = this.playersMap[id];
+          const you = this.isSelfId(id) ? ' (You)' : '';
           const badge = document.createElement('div');
           badge.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center space-x-3 shadow';
           badge.innerHTML = `
             <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center font-bold text-xs text-white">
-              ${p.name.charAt(0).toUpperCase()}
+              ${esc(p.name.charAt(0).toUpperCase())}
             </div>
             <div class="flex-1 truncate">
-              <span class="text-xs font-bold text-white block truncate">${p.name}</span>
+              <span class="text-xs font-bold text-white block truncate">${esc(p.name)}${you}</span>
               <span class="text-[10px] text-emerald-400 flex items-center space-x-1">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span>Ready</span>
@@ -918,17 +1043,18 @@
 
       // Offline Practice Mode vs 3 AI Players
       startOfflinePractice() {
+        this.cleanupNetwork();
         this.mode = 'OFFLINE';
         this.isHost = true;
         this.gameStarted = true;
         this.roomCode = 'SOLO';
-        this.myPlayerName = 'You';
+        this.myPlayerName = document.getElementById('inputHostName').value.trim() || 'You';
 
         this.playersMap = {
-          'SOLO_USER': { name: 'You', claimed: Array(25).fill(false), lines: 0 },
-          'AI_1': { name: 'MathBot Alpha', claimed: Array(25).fill(false), lines: 0 },
-          'AI_2': { name: 'FactorBot', claimed: Array(25).fill(false), lines: 0 },
-          'AI_3': { name: 'QuickCalc', claimed: Array(25).fill(false), lines: 0 }
+          'SOLO_USER': { name: this.myPlayerName, claimed: this.newClaimed(), lines: 0 },
+          'AI_1': { name: 'MathBot Alpha', claimed: this.newClaimed(), lines: 0 },
+          'AI_2': { name: 'FactorBot', claimed: this.newClaimed(), lines: 0 },
+          'AI_3': { name: 'QuickCalc', claimed: this.newClaimed(), lines: 0 }
         };
 
         this.myPeerId = 'SOLO_USER';
@@ -949,7 +1075,9 @@
         const pool = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 21, 24, 25, 27, 28, 30, 32, 35, 36];
         // Shuffle
         const shuffled = [...pool].sort(() => 0.5 - Math.random());
-        return shuffled.slice(0, 25);
+        const nums = shuffled.slice(0, 24);
+        nums.splice(FREE_INDEX, 0, null); // centre square is FREE
+        return nums;
       }
 
       getRandomTargetNumber() {
@@ -962,12 +1090,17 @@
 
         // Generate player board
         this.boardNumbers = this.generateBoardNumbers();
-        this.boardClaimed = Array(25).fill(false);
+        this.boardClaimed = this.newClaimed();
         this.playerScore = 0;
+        this.claimedThisRound = false;
+
+        const me = this.playersMap[this.selfKey()];
+        if (me) { me.claimed = this.boardClaimed; me.lines = 0; }
 
         this.renderBingoCard();
         this.renderOpponentMatrices();
         this.updateTargetDisplay();
+        this.updateRoundHint();
       }
 
       updateTargetDisplay() {
@@ -985,10 +1118,19 @@
           const btn = document.createElement('button');
           const isClaimed = this.boardClaimed[idx];
 
+          if (val === null) {
+            btn.className = 'card-cell relative rounded-xl flex flex-col items-center justify-center border shadow-md bg-gradient-to-tr from-amber-500 to-yellow-400 border-amber-300 text-slate-900 scale-95 cursor-default';
+            btn.innerHTML = '<i class="fa-solid fa-star text-xl sm:text-2xl"></i><span class="text-[10px] sm:text-xs font-black tracking-widest">FREE</span>';
+            grid.appendChild(btn);
+            return;
+          }
+
           btn.className = `card-cell relative rounded-xl font-black text-xl sm:text-2xl flex items-center justify-center transition-all duration-200 border shadow-md ${
             isClaimed
               ? 'bg-gradient-to-tr from-emerald-600 to-teal-500 border-emerald-400 text-white scale-95 shadow-emerald-500/20'
-              : 'bg-slate-950 hover:bg-slate-800 border-slate-800 hover:border-indigo-500/50 text-slate-100 hover:scale-105'
+              : this.claimedThisRound
+                ? 'bg-slate-950 border-slate-800 text-slate-500 opacity-60'
+                : 'bg-slate-950 hover:bg-slate-800 border-slate-800 hover:border-indigo-500/50 text-slate-100 hover:scale-105'
           }`;
 
           btn.innerHTML = `
@@ -1011,7 +1153,7 @@
         Object.keys(this.playersMap).forEach(id => {
           // Skip rendering self in opponent panel unless in Host view
           const p = this.playersMap[id];
-          const isSelf = (id === this.myPeerId || id === 'HOST_SELF');
+          const isSelf = this.isSelfId(id);
 
           const card = document.createElement('div');
           card.className = `bg-slate-950 border ${isSelf ? 'border-indigo-500/40 bg-indigo-950/20' : 'border-slate-800'} rounded-xl p-3 flex items-center justify-between space-x-3`;
@@ -1026,7 +1168,7 @@
           card.innerHTML = `
             <div class="flex-1 truncate">
               <div class="flex items-center space-x-2">
-                <span class="font-bold text-xs text-white truncate">${p.name}</span>
+                <span class="font-bold text-xs text-white truncate">${esc(p.name)}</span>
                 ${isSelf ? '<span class="text-[10px] bg-indigo-500/30 text-indigo-300 font-extrabold px-1.5 py-0.5 rounded">YOU</span>' : ''}
               </div>
               <div class="text-[11px] text-slate-400 mt-1 flex items-center space-x-2">
@@ -1042,14 +1184,24 @@
 
       // Check math and handle player cell click
       handleCellClick(index, value) {
-        if (this.boardClaimed[index]) return; // Already claimed
+        if (value === null || this.boardClaimed[index]) return; // Free square / already claimed
+        if (!this.currentTarget) return;
+
+        // Only one claim per round
+        if (this.claimedThisRound) {
+          sound.playWrongBuzz();
+          this.updateRoundHint('You have already used this round. Wait for the next roll!', 'text-amber-400');
+          return;
+        }
 
         // Factor math check: target % value === 0
         if (this.currentTarget % value === 0) {
           // Correct Factor!
           sound.playCorrectChime();
           this.boardClaimed[index] = true;
+          this.claimedThisRound = true;
           this.renderBingoCard();
+          this.updateRoundHint(`Nice! ${value} is a factor of ${this.currentTarget}. Wait for the next roll.`, 'text-emerald-400');
 
           // Update lines & notify host/peers
           this.playerScore = this.calculateBingoLines(this.boardClaimed);
@@ -1077,8 +1229,29 @@
       }
 
       passTurn() {
+        if (this.claimedThisRound) return;
         sound.playRollTick();
-        // Optional visual toast or sound
+        this.claimedThisRound = true;
+        this.renderBingoCard();
+        this.updateRoundHint('You passed this round. Wait for the next roll.', 'text-amber-400');
+      }
+
+      updateRoundHint(text, colorClass) {
+        const el = document.getElementById('roundHint');
+        if (!el) return;
+        el.className = `text-xs ${colorClass || 'text-slate-400'}`;
+        el.textContent = text || 'Tap ONE card number that divides evenly into the target!';
+        const passBtn = document.getElementById('passTurnBtn');
+        if (passBtn) {
+          passBtn.disabled = this.claimedThisRound;
+          passBtn.classList.toggle('opacity-40', this.claimedThisRound);
+        }
+      }
+
+      startNewRoundState() {
+        this.claimedThisRound = false;
+        this.renderBingoCard();
+        this.updateRoundHint();
       }
 
       broadcastBoardUpdate() {
@@ -1181,6 +1354,7 @@
         sound.playRollTick();
         this.roundNumber++;
         this.currentTarget = this.getRandomTargetNumber();
+        this.startNewRoundState();
 
         // If offline mode, simulate AI clicks periodically
         if (this.mode === 'OFFLINE') {
@@ -1204,6 +1378,7 @@
         this.currentTarget = msg.currentTarget;
         this.timerDuration = msg.timerDuration || 30;
 
+        this.startNewRoundState();
         this.updateTargetDisplay();
         this.startRoundTimer();
       }
