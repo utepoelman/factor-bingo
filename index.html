@@ -7,8 +7,8 @@
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- PeerJS CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- MQTT OVER WEBSOCKETS CLIENT LIBRARY -->
+  <script src="https://unpkg.com/mqtt@5.3.4/dist/mqtt.min.js"></script>
   <!-- Canvas Confetti CDN -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <!-- Font Awesome Icons CDN -->
@@ -70,7 +70,7 @@
     <div class="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-2">
       <div class="flex items-center space-x-3 cursor-pointer" onclick="app.showLanding()">
         <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-500 flex items-center justify-center text-white font-extrabold text-xl shadow-lg shadow-indigo-500/30">
-          <i class="fa-solid fa-square-root-variable"></i>
+          <i class="fa-solid fa-table-cells"></i>
         </div>
         <div>
           <h1 class="font-black text-xl tracking-tight bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400 bg-clip-text text-transparent">
@@ -392,20 +392,6 @@
 
   <!-- APPLICATION JAVASCRIPT LOGIC -->
   <script>
-    // ICE servers. STUN alone cannot get through many school/corporate networks;
-    // TURN relays traffic (including over TCP port 443) so connections still work.
-    // The openrelay credentials below are a free shared service and may be rate-limited.
-    // For a reliable classroom setup, create a free account at metered.ca (or similar)
-    // and replace the TURN entries with your own credentials.
-    const ICE_SERVERS = [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' },
-      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
-    ];
-    const PEER_PREFIX = 'fbingo-v2-';
     const FREE_INDEX = 12; // centre of the 5x5 board
 
     function esc(str) {
@@ -524,11 +510,8 @@
         this.myPlayerName = 'Player';
         this.isHost = false;
         
-        // PeerJS & BroadcastChannel Fallbacks
-        this.peer = null;
-        this.connections = {}; // Host connections map: peerId -> DataConnection
-        this.hostConn = null; // Player connection to Host
-        this.broadcastChannel = null;
+        // MQTT Networking Client
+        this.mqttClient = null;
 
         // Game State
         this.gameStarted = false;
@@ -542,6 +525,9 @@
         this.joinTimeout = null;
         this.joinConfirmed = false;
 
+        // Random Number Tracking (1-100 without repeats)
+        this.drawnTargets = [];
+
         // Player Card & Score State
         this.boardNumbers = []; // 25 numbers
         this.boardClaimed = Array(25).fill(false); // boolean grid
@@ -549,29 +535,12 @@
 
         // Opponents State tracking map: peerId -> { name, claimed: Array(25), lines: 0 }
         this.playersMap = {};
-
-        // Numbers with good factors suitable for target roll generation
-        this.targetPool = [12, 16, 18, 20, 24, 25, 28, 30, 32, 36, 40, 42, 45, 48, 50, 60, 64, 72, 80, 90, 100];
       }
 
       init() {
-        this.setupBroadcastChannel();
         this.showLanding();
       }
 
-      // Initialize local BroadcastChannel for multi-tab fallback
-      setupBroadcastChannel() {
-        try {
-          if ('BroadcastChannel' in window) {
-            this.broadcastChannel = new BroadcastChannel('factor_bingo_local_channel');
-            this.broadcastChannel.onmessage = (event) => this.handleIncomingMessage(event.data, 'BROADCAST');
-          }
-        } catch (e) {
-          console.warn('BroadcastChannel not supported:', e);
-        }
-      }
-
-      // UI View Switchers
       hideAllViews() {
         ['viewLanding', 'viewJoinForm', 'viewLobby', 'viewGameplay'].forEach(id => {
           document.getElementById(id).classList.add('hidden');
@@ -582,10 +551,10 @@
         clearTimeout(this.joinTimeout);
         if (this.timerInterval) clearInterval(this.timerInterval);
         this.timerInterval = null;
-        if (this.peer) { try { this.peer.destroy(); } catch (e) {} }
-        this.peer = null;
-        this.connections = {};
-        this.hostConn = null;
+        if (this.mqttClient) {
+          try { this.mqttClient.end(); } catch (e) {}
+        }
+        this.mqttClient = null;
         this.gameStarted = false;
         this.joinConfirmed = false;
         this.isPaused = false;
@@ -624,7 +593,6 @@
         document.getElementById('statusDot').className = `w-2.5 h-2.5 rounded-full ${dotClass}`;
       }
 
-      // Generate 4-digit room code
       generateRoomCode() {
         return Math.floor(1000 + Math.random() * 9000).toString();
       }
@@ -641,7 +609,7 @@
         this.mode = 'HOST';
         this.roomCode = this.generateRoomCode();
         this.myPlayerName = hostName;
-        this.myPeerId = `${PEER_PREFIX}${this.roomCode}`;
+        this.myPeerId = `host-${Math.random().toString(36).substr(2, 6)}`;
 
         document.getElementById('lobbyRoomCode').textContent = this.roomCode;
         document.getElementById('playerWaitingNotice').classList.add('hidden');
@@ -650,7 +618,6 @@
         document.getElementById('hostForceRollBtn').classList.remove('hidden');
         document.getElementById('hostPauseBtn').classList.remove('hidden');
 
-        // Reset player map with Host self
         this.playersMap = {};
         this.playersMap['HOST_SELF'] = {
           name: this.myPlayerName,
@@ -662,7 +629,7 @@
         this.hideAllViews();
         document.getElementById('viewLobby').classList.remove('hidden');
 
-        this.initPeerJS(this.myPeerId);
+        this.initMqttSession();
       }
 
       // --- PLAYER JOIN SETUP ---
@@ -684,7 +651,7 @@
         this.mode = 'PLAYER';
         this.myPlayerName = nameInput;
         this.roomCode = codeInput;
-        this.myPeerId = `player-${Math.floor(Math.random() * 89999 + 10000)}`;
+        this.myPeerId = `player-${Math.random().toString(36).substr(2, 6)}`;
 
         document.getElementById('lobbyRoomCode').textContent = this.roomCode;
         document.getElementById('hostLobbyControls').classList.add('hidden');
@@ -703,26 +670,19 @@
         this.hideAllViews();
         document.getElementById('viewLobby').classList.remove('hidden');
 
-        this.setJoinNotice('connecting', `Connecting to room ${this.roomCode}...`, 'Contacting the game server and the host.');
+        this.setJoinNotice('connecting', `Connecting to room ${this.roomCode}...`, 'Contacting game server over Port 443.');
         this.updateStatus('Connecting...', 'bg-amber-500 animate-pulse');
 
-        // Give up with a helpful message if nothing happens
-        this.joinTimeout = setTimeout(() => this.showJoinError('timeout'), 20000);
+        this.joinTimeout = setTimeout(() => this.showJoinError('timeout'), 15000);
 
-        // Init PeerJS and attempt host connection
-        this.initPeerJS(this.myPeerId, () => {
-          this.connectToPeerHost(`${PEER_PREFIX}${this.roomCode}`);
-        });
-
-        // Also send BroadcastChannel hello for instant local tab testing fallback
-        if (this.broadcastChannel) {
-          this.broadcastChannel.postMessage({
+        this.initMqttSession(() => {
+          this.broadcastToAll({
             type: 'PLAYER_JOIN_REQ',
             senderId: this.myPeerId,
             playerName: this.myPlayerName,
             roomCode: this.roomCode
           });
-        }
+        });
       }
 
       setJoinNotice(kind, title, sub) {
@@ -758,122 +718,65 @@
       showJoinError(reason) {
         if (this.mode !== 'PLAYER' || this.joinConfirmed) return;
         clearTimeout(this.joinTimeout);
-        const msgs = {
-          notfound: ['Room not found', `No host with code ${this.roomCode} was found. Check the code and make sure the host has created the room.`],
-          server:   ['Cannot reach the game server', 'The matchmaking server (PeerJS) could not be reached. This network may be blocking it. Try a different network or a phone hotspot.'],
-          timeout:  ['Could not connect to the host', 'Some school Wi-Fi networks block direct device-to-device connections. Try again, and check the room code is correct.'],
-          other:    ['Connection problem', 'Something went wrong while connecting. Please try again.']
-        };
-        const m = msgs[reason] || msgs.other;
-        this.setJoinNotice('error', m[0], m[1]);
+        this.setJoinNotice('error', 'Could not connect to host', `Room ${this.roomCode} was not found or host has disconnected.`);
         this.updateStatus('Connection failed', 'bg-rose-500');
       }
 
-      handlePeerError(err) {
-        const type = err && err.type;
-        if (this.mode === 'HOST') {
-          if (type === 'unavailable-id') {
-            // Another room on the shared server already uses this code: pick a new one
-            this.roomCode = this.generateRoomCode();
-            this.myPeerId = `${PEER_PREFIX}${this.roomCode}`;
-            document.getElementById('lobbyRoomCode').textContent = this.roomCode;
-            this.initPeerJS(this.myPeerId);
-          } else {
-            this.updateStatus('Server unreachable (others cannot join)', 'bg-rose-500');
-          }
-          return;
-        }
-        if (this.mode === 'PLAYER') {
-          if (type === 'peer-unavailable') this.showJoinError('notfound');
-          else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(type)) this.showJoinError('server');
-          else if (type === 'webrtc') this.showJoinError('timeout');
-          else this.showJoinError('other');
-        }
-      }
-
-      // --- PEERJS ENGINE WITH ICE STUN SERVERS ---
-      initPeerJS(customId, onOpenCallback) {
-        if (this.peer) {
-          try { this.peer.destroy(); } catch (e) {}
+      // --- HIGH-AVAILABILITY MQTT WEBSOCKET NETWORK ENGINE ---
+      initMqttSession(onReady) {
+        if (this.mqttClient) {
+          try { this.mqttClient.end(); } catch (e) {}
         }
 
-        const peerConfig = {
-          debug: 1,
-          config: { iceServers: ICE_SERVERS }
-        };
-
-        this.peer = new Peer(customId, peerConfig);
-
-        this.peer.on('open', (id) => {
-          console.log('PeerJS server connected. My ID:', id);
-          if (this.isHost) {
-            this.updateStatus('Room Live (Waiting for Players)', 'bg-emerald-500');
-          } else {
-            this.updateStatus('Connected to Peer Network', 'bg-blue-500');
-          }
-          if (onOpenCallback) onOpenCallback();
+        // Connect to public WebSocket broker over SSL/TLS Port 443
+        this.mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+          clientId: 'bingo_' + this.myPeerId + '_' + Math.random().toString(36).substr(2, 4),
+          clean: true,
+          connectTimeout: 6000,
+          keepalive: 30
         });
 
-        this.peer.on('connection', (conn) => {
-          this.handleIncomingPeerConnection(conn);
-        });
-
-        this.peer.on('error', (err) => {
-          console.warn('PeerJS Error:', err.type, err);
-          this.handlePeerError(err);
-        });
-      }
-
-      connectToPeerHost(hostPeerId) {
-        if (!this.peer) return;
-        const conn = this.peer.connect(hostPeerId, { reliable: true });
-
-        conn.on('open', () => {
-          this.hostConn = conn;
-          this.markJoined();
-          // Handshake send name & room
-          conn.send({
-            type: 'PLAYER_JOIN_REQ',
-            senderId: this.myPeerId,
-            playerName: this.myPlayerName,
-            roomCode: this.roomCode
+        this.mqttClient.on('connect', () => {
+          const topic = `factor-bingo-v3/${this.roomCode}`;
+          this.mqttClient.subscribe(topic, { qos: 0 }, (err) => {
+            if (!err) {
+              if (this.isHost) {
+                this.updateStatus('Room Live (Waiting for Players)', 'bg-emerald-500');
+              } else {
+                this.updateStatus('Connected to Server', 'bg-blue-500');
+              }
+              if (onReady) onReady();
+            }
           });
         });
 
-        conn.on('data', (data) => {
-          this.handleIncomingMessage(data, conn.peer);
+        this.mqttClient.on('message', (topic, payload) => {
+          try {
+            const data = JSON.parse(payload.toString());
+            if (data.senderId === this.myPeerId) return; // ignore self-echoes
+            this.handleIncomingMessage(data, data.senderId);
+          } catch (e) {
+            console.error('MQTT JSON Parse Error', e);
+          }
         });
 
-        conn.on('close', () => {
-          this.updateStatus('Host Disconnected', 'bg-rose-500');
+        this.mqttClient.on('error', () => {
+          this.updateStatus('Server connecting error...', 'bg-rose-500');
         });
-
-        conn.on('error', () => this.showJoinError('timeout'));
       }
 
-      handleIncomingPeerConnection(conn) {
-        conn.on('open', () => {
-          this.connections[conn.peer] = conn;
-        });
-
-        conn.on('data', (data) => {
-          this.handleIncomingMessage(data, conn.peer);
-        });
-
-        conn.on('close', () => {
-          delete this.connections[conn.peer];
-          delete this.playersMap[conn.peer];
-          this.updateLobbyPlayerList();
-          this.renderOpponentMatrices();
-          this.broadcastState();
-        });
+      broadcastToAll(data) {
+        data.roomCode = this.roomCode;
+        data.senderId = this.myPeerId;
+        if (this.mqttClient && this.mqttClient.connected) {
+          const topic = `factor-bingo-v3/${this.roomCode}`;
+          this.mqttClient.publish(topic, JSON.stringify(data), { qos: 0 });
+        }
       }
 
       // --- NETWORK MESSAGE ROUTER ---
       handleIncomingMessage(msg, originPeerId) {
         if (!msg || typeof msg !== 'object') return;
-
-        // Filter out broadcast messages meant for other room codes
         if (msg.roomCode && msg.roomCode !== this.roomCode) return;
 
         switch (msg.type) {
@@ -941,23 +844,6 @@
         }
       }
 
-      // Broadcast state to all connected peers & local BroadcastChannel
-      broadcastToAll(data) {
-        data.roomCode = this.roomCode;
-        // Direct PeerJS connections
-        Object.values(this.connections).forEach(conn => {
-          if (conn && conn.open) conn.send(data);
-        });
-        // Host connection if player
-        if (this.hostConn && this.hostConn.open) {
-          this.hostConn.send(data);
-        }
-        // BroadcastChannel fallback
-        if (this.broadcastChannel) {
-          this.broadcastChannel.postMessage(data);
-        }
-      }
-
       broadcastState() {
         if (!this.isHost) return;
         this.broadcastToAll({
@@ -1011,15 +897,15 @@
         });
       }
 
-      // --- GAME LAUNCH & FIRST ROLL ---
+      // --- GAME LAUNCH & RANDOM SELECTION ---
       startMultiplayerGame() {
         if (!this.isHost) return;
 
         this.gameStarted = true;
         this.roundNumber = 1;
+        this.drawnTargets = []; // Reset drawn target history for a new game
         this.currentTarget = this.getRandomTargetNumber();
 
-        // Broadcast game start signal with initial target roll
         this.broadcastToAll({
           type: 'GAME_STARTED',
           roundNumber: this.roundNumber,
@@ -1041,7 +927,6 @@
         this.startRoundTimer();
       }
 
-      // Offline Practice Mode vs 3 AI Players
       startOfflinePractice() {
         this.cleanupNetwork();
         this.mode = 'OFFLINE';
@@ -1060,6 +945,7 @@
         this.myPeerId = 'SOLO_USER';
         this.roundNumber = 1;
         this.timerDuration = 30;
+        this.drawnTargets = [];
         this.currentTarget = this.getRandomTargetNumber();
 
         document.getElementById('hostForceRollBtn').classList.remove('hidden');
@@ -1069,26 +955,33 @@
         this.startRoundTimer();
       }
 
-      // Generate 5x5 Board numbers (1 to 25 shuffled or randomized numbers up to 36)
       generateBoardNumbers() {
-        // Pool of numbers 1..36 with nice factor properties
         const pool = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 21, 24, 25, 27, 28, 30, 32, 35, 36];
-        // Shuffle
         const shuffled = [...pool].sort(() => 0.5 - Math.random());
         const nums = shuffled.slice(0, 24);
-        nums.splice(FREE_INDEX, 0, null); // centre square is FREE
+        nums.splice(FREE_INDEX, 0, null); // centre square FREE
         return nums;
       }
 
+      // True random selection from 1 to 100 without repeat until all 100 drawn
       getRandomTargetNumber() {
-        return this.targetPool[Math.floor(Math.random() * this.targetPool.length)];
+        if (this.drawnTargets.length >= 100) {
+          this.drawnTargets = []; // Reset when all 100 numbers have been drawn
+        }
+
+        let num;
+        do {
+          num = Math.floor(Math.random() * 100) + 1;
+        } while (this.drawnTargets.includes(num));
+
+        this.drawnTargets.push(num);
+        return num;
       }
 
       setupGameplayUI() {
         this.hideAllViews();
         document.getElementById('viewGameplay').classList.remove('hidden');
 
-        // Generate player board
         this.boardNumbers = this.generateBoardNumbers();
         this.boardClaimed = this.newClaimed();
         this.playerScore = 0;
@@ -1109,7 +1002,6 @@
         document.getElementById('roundCounter').textContent = `#${this.roundNumber}`;
       }
 
-      // Render main 5x5 BINGO board
       renderBingoCard() {
         const grid = document.getElementById('bingoGrid');
         grid.innerHTML = '';
@@ -1145,13 +1037,11 @@
         document.getElementById('playerScoreBadge').textContent = `${this.playerScore} Lines`;
       }
 
-      // Render 5x5 Dot Matrix tracking cards for each opponent
       renderOpponentMatrices() {
         const container = document.getElementById('opponentsMatrixContainer');
         container.innerHTML = '';
 
         Object.keys(this.playersMap).forEach(id => {
-          // Skip rendering self in opponent panel unless in Host view
           const p = this.playersMap[id];
           const isSelf = this.isSelfId(id);
 
@@ -1182,40 +1072,32 @@
         });
       }
 
-      // Check math and handle player cell click
       handleCellClick(index, value) {
-        if (value === null || this.boardClaimed[index]) return; // Free square / already claimed
+        if (value === null || this.boardClaimed[index]) return;
         if (!this.currentTarget) return;
 
-        // Only one claim per round
         if (this.claimedThisRound) {
           sound.playWrongBuzz();
           this.updateRoundHint('You have already used this round. Wait for the next roll!', 'text-amber-400');
           return;
         }
 
-        // Factor math check: target % value === 0
         if (this.currentTarget % value === 0) {
-          // Correct Factor!
           sound.playCorrectChime();
           this.boardClaimed[index] = true;
           this.claimedThisRound = true;
           this.renderBingoCard();
           this.updateRoundHint(`Nice! ${value} is a factor of ${this.currentTarget}. Wait for the next roll.`, 'text-emerald-400');
 
-          // Update lines & notify host/peers
           this.playerScore = this.calculateBingoLines(this.boardClaimed);
           document.getElementById('playerScoreBadge').textContent = `${this.playerScore} Lines`;
 
-          // Broadcast board update
           this.broadcastBoardUpdate();
 
-          // Check Win Condition (1 or more complete BINGO lines)
           if (this.playerScore > 0) {
             this.triggerBingoWin();
           }
         } else {
-          // Incorrect Factor!
           sound.playWrongBuzz();
           const grid = document.getElementById('bingoGrid');
           const cell = grid.children[index];
@@ -1270,19 +1152,15 @@
         });
       }
 
-      // Calculate complete 5x5 BINGO lines (5 rows, 5 columns, 2 diagonals)
       calculateBingoLines(grid) {
         let lines = 0;
 
-        // Rows
         for (let r = 0; r < 5; r++) {
           if ([0,1,2,3,4].every(c => grid[r * 5 + c])) lines++;
         }
-        // Columns
         for (let c = 0; c < 5; c++) {
           if ([0,1,2,3,4].every(r => grid[r * 5 + c])) lines++;
         }
-        // Diagonals
         if ([0, 6, 12, 18, 24].every(idx => grid[idx])) lines++;
         if ([4, 8, 12, 16, 20].every(idx => grid[idx])) lines++;
 
@@ -1308,7 +1186,6 @@
         document.getElementById('winRoundCount').textContent = roundNum;
         document.getElementById('winModal').classList.remove('hidden');
 
-        // Confetti celebration
         if (typeof confetti === 'function') {
           confetti({
             particleCount: 100,
@@ -1322,7 +1199,6 @@
         document.getElementById('winModal').classList.add('hidden');
       }
 
-      // --- TIMED ROLLS SYSTEM ---
       startRoundTimer() {
         if (this.timerInterval) clearInterval(this.timerInterval);
         this.timerRemaining = this.timerDuration;
@@ -1356,7 +1232,6 @@
         this.currentTarget = this.getRandomTargetNumber();
         this.startNewRoundState();
 
-        // If offline mode, simulate AI clicks periodically
         if (this.mode === 'OFFLINE') {
           this.simulateAITurns();
         }
@@ -1389,17 +1264,14 @@
         icon.className = this.isPaused ? 'fa-solid fa-play text-emerald-400' : 'fa-solid fa-pause';
       }
 
-      // AI Simulation logic for Practice Mode
       simulateAITurns() {
         ['AI_1', 'AI_2', 'AI_3'].forEach(aiId => {
           const ai = this.playersMap[aiId];
           if (!ai) return;
 
-          // AI delay between 2 to 8 seconds
           const delay = Math.floor(2000 + Math.random() * 6000);
           setTimeout(() => {
             if (!this.gameStarted) return;
-            // AI picks a random unclaimed index
             const unclaimedIndices = ai.claimed.map((c, i) => c ? null : i).filter(v => v !== null);
             if (unclaimedIndices.length > 0 && Math.random() > 0.4) {
               const randomIndex = unclaimedIndices[Math.floor(Math.random() * unclaimedIndices.length)];
