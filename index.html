@@ -289,7 +289,7 @@
           </div>
         </div>
 
-        <!-- 30-Second Timed Countdown Bar -->
+        <!-- Timed Countdown Bar -->
         <div class="space-y-1">
           <div class="flex justify-between items-center text-xs font-semibold">
             <span class="text-slate-400 flex items-center space-x-1">
@@ -337,7 +337,7 @@
               <span class="text-xs text-slate-400">5x5 Progress</span>
             </div>
 
-            <div id="opponentsMatrixContainer" class="space-y-4 max-h-[420px] overflow-y-auto pr-1">
+            <div id="opponentsMatrixContainer" class="space-y-3 max-h-[480px] overflow-y-auto pr-1">
               <!-- Live Dot Matrix Mini Cards inserted here -->
             </div>
           </div>
@@ -533,7 +533,7 @@
         this.boardClaimed = Array(25).fill(false); // boolean grid
         this.playerScore = 0;
 
-        // Opponents State tracking map: peerId -> { name, claimed: Array(25), lines: 0 }
+        // Opponents State tracking map: peerId -> { name, claimed: Array(25), lines: 0, movedThisRound: bool }
         this.playersMap = {};
       }
 
@@ -568,12 +568,12 @@
       }
 
       selfKey() {
-        if (this.mode === 'OFFLINE') return 'SOLO_USER';
-        if (this.mode === 'HOST') return 'HOST_SELF';
         return this.myPeerId;
       }
 
-      isSelfId(id) { return id === this.selfKey(); }
+      isSelfId(id) {
+        return id === this.myPeerId;
+      }
 
       showLanding() {
         this.cleanupNetwork();
@@ -619,10 +619,11 @@
         document.getElementById('hostPauseBtn').classList.remove('hidden');
 
         this.playersMap = {};
-        this.playersMap['HOST_SELF'] = {
+        this.playersMap[this.myPeerId] = {
           name: this.myPlayerName,
           claimed: this.newClaimed(),
-          lines: 0
+          lines: 0,
+          movedThisRound: false
         };
 
         this.updateLobbyPlayerList();
@@ -663,7 +664,8 @@
         this.playersMap[this.myPeerId] = {
           name: this.myPlayerName,
           claimed: this.newClaimed(),
-          lines: 0
+          lines: 0,
+          movedThisRound: false
         };
 
         this.updateLobbyPlayerList();
@@ -728,7 +730,6 @@
           try { this.mqttClient.end(); } catch (e) {}
         }
 
-        // Connect to public WebSocket broker over SSL/TLS Port 443
         this.mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
           clientId: 'bingo_' + this.myPeerId + '_' + Math.random().toString(36).substr(2, 4),
           clean: true,
@@ -785,7 +786,8 @@
               this.playersMap[msg.senderId] = {
                 name: String(msg.playerName || 'Player').slice(0, 12),
                 claimed: this.newClaimed(),
-                lines: 0
+                lines: 0,
+                movedThisRound: false
               };
               this.updateLobbyPlayerList();
               this.broadcastState();
@@ -813,6 +815,9 @@
             if (this.playersMap[msg.senderId]) {
               this.playersMap[msg.senderId].claimed = msg.claimed;
               this.playersMap[msg.senderId].lines = msg.lines;
+              if (msg.movedThisRound) {
+                this.playersMap[msg.senderId].movedThisRound = true;
+              }
               this.renderOpponentMatrices();
             }
             if (this.isHost) {
@@ -820,20 +825,25 @@
                 type: 'OPPONENT_UPDATE',
                 senderId: msg.senderId,
                 claimed: msg.claimed,
-                lines: msg.lines
+                lines: msg.lines,
+                movedThisRound: msg.movedThisRound
               });
+              if (msg.movedThisRound) {
+                this.checkAllPlayersMoved();
+              }
             }
             break;
 
           case 'OPPONENT_UPDATE':
             if (!this.isHost && msg.senderId !== this.myPeerId) {
-              if (!this.playersMap[msg.senderId]) {
-                this.playersMap[msg.senderId] = { name: 'Player', claimed: msg.claimed, lines: msg.lines };
-              } else {
+              if (this.playersMap[msg.senderId]) {
                 this.playersMap[msg.senderId].claimed = msg.claimed;
                 this.playersMap[msg.senderId].lines = msg.lines;
+                if (msg.movedThisRound) {
+                  this.playersMap[msg.senderId].movedThisRound = true;
+                }
+                this.renderOpponentMatrices();
               }
-              this.renderOpponentMatrices();
             }
             break;
 
@@ -903,8 +913,14 @@
 
         this.gameStarted = true;
         this.roundNumber = 1;
-        this.drawnTargets = []; // Reset drawn target history for a new game
+        this.drawnTargets = [];
         this.currentTarget = this.getRandomTargetNumber();
+
+        Object.keys(this.playersMap).forEach(id => {
+          if (this.playersMap[id]) {
+            this.playersMap[id].movedThisRound = false;
+          }
+        });
 
         this.broadcastToAll({
           type: 'GAME_STARTED',
@@ -923,6 +939,12 @@
         this.currentTarget = msg.currentTarget;
         this.timerDuration = msg.timerDuration || 30;
 
+        Object.keys(this.playersMap).forEach(id => {
+          if (this.playersMap[id]) {
+            this.playersMap[id].movedThisRound = false;
+          }
+        });
+
         this.setupGameplayUI();
         this.startRoundTimer();
       }
@@ -934,15 +956,15 @@
         this.gameStarted = true;
         this.roomCode = 'SOLO';
         this.myPlayerName = document.getElementById('inputHostName').value.trim() || 'You';
+        this.myPeerId = 'SOLO_USER';
 
         this.playersMap = {
-          'SOLO_USER': { name: this.myPlayerName, claimed: this.newClaimed(), lines: 0 },
-          'AI_1': { name: 'MathBot Alpha', claimed: this.newClaimed(), lines: 0 },
-          'AI_2': { name: 'FactorBot', claimed: this.newClaimed(), lines: 0 },
-          'AI_3': { name: 'QuickCalc', claimed: this.newClaimed(), lines: 0 }
+          'SOLO_USER': { name: this.myPlayerName, claimed: this.newClaimed(), lines: 0, movedThisRound: false },
+          'AI_1': { name: 'MathBot Alpha', claimed: this.newClaimed(), lines: 0, movedThisRound: false },
+          'AI_2': { name: 'FactorBot', claimed: this.newClaimed(), lines: 0, movedThisRound: false },
+          'AI_3': { name: 'QuickCalc', claimed: this.newClaimed(), lines: 0, movedThisRound: false }
         };
 
-        this.myPeerId = 'SOLO_USER';
         this.roundNumber = 1;
         this.timerDuration = 30;
         this.drawnTargets = [];
@@ -955,8 +977,9 @@
         this.startRoundTimer();
       }
 
+      // Randomly select 24 unique numbers from range 1 through 36
       generateBoardNumbers() {
-        const pool = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 21, 24, 25, 27, 28, 30, 32, 35, 36];
+        const pool = Array.from({ length: 36 }, (_, i) => i + 1);
         const shuffled = [...pool].sort(() => 0.5 - Math.random());
         const nums = shuffled.slice(0, 24);
         nums.splice(FREE_INDEX, 0, null); // centre square FREE
@@ -966,7 +989,7 @@
       // True random selection from 1 to 100 without repeat until all 100 drawn
       getRandomTargetNumber() {
         if (this.drawnTargets.length >= 100) {
-          this.drawnTargets = []; // Reset when all 100 numbers have been drawn
+          this.drawnTargets = [];
         }
 
         let num;
@@ -988,7 +1011,11 @@
         this.claimedThisRound = false;
 
         const me = this.playersMap[this.selfKey()];
-        if (me) { me.claimed = this.boardClaimed; me.lines = 0; }
+        if (me) { 
+          me.claimed = this.boardClaimed; 
+          me.lines = 0;
+          me.movedThisRound = false;
+        }
 
         this.renderBingoCard();
         this.renderOpponentMatrices();
@@ -1055,14 +1082,19 @@
           }
           dotsHtml += '</div>';
 
+          const statusBadge = p.movedThisRound 
+            ? '<span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-semibold px-1.5 py-0.5 rounded border border-emerald-500/30"><i class="fa-solid fa-check text-[9px] mr-0.5"></i>Moved</span>'
+            : '<span class="text-[10px] bg-slate-800 text-slate-400 font-semibold px-1.5 py-0.5 rounded">Thinking...</span>';
+
           card.innerHTML = `
             <div class="flex-1 truncate">
               <div class="flex items-center space-x-2">
                 <span class="font-bold text-xs text-white truncate">${esc(p.name)}</span>
                 ${isSelf ? '<span class="text-[10px] bg-indigo-500/30 text-indigo-300 font-extrabold px-1.5 py-0.5 rounded">YOU</span>' : ''}
               </div>
-              <div class="text-[11px] text-slate-400 mt-1 flex items-center space-x-2">
+              <div class="text-[11px] text-slate-400 mt-1 flex items-center justify-between pr-2">
                 <span>Lines: <strong class="text-emerald-400">${p.lines || 0}</strong></span>
+                ${statusBadge}
               </div>
             </div>
             ${dotsHtml}
@@ -1092,7 +1124,7 @@
           this.playerScore = this.calculateBingoLines(this.boardClaimed);
           document.getElementById('playerScoreBadge').textContent = `${this.playerScore} Lines`;
 
-          this.broadcastBoardUpdate();
+          this.broadcastBoardUpdate(true);
 
           if (this.playerScore > 0) {
             this.triggerBingoWin();
@@ -1116,6 +1148,7 @@
         this.claimedThisRound = true;
         this.renderBingoCard();
         this.updateRoundHint('You passed this round. Wait for the next roll.', 'text-amber-400');
+        this.broadcastBoardUpdate(true);
       }
 
       updateRoundHint(text, colorClass) {
@@ -1136,11 +1169,14 @@
         this.updateRoundHint();
       }
 
-      broadcastBoardUpdate() {
-        const myKey = this.isHost ? (this.mode === 'OFFLINE' ? 'SOLO_USER' : 'HOST_SELF') : this.myPeerId;
+      broadcastBoardUpdate(hasMoved = false) {
+        const myKey = this.myPeerId;
         if (this.playersMap[myKey]) {
           this.playersMap[myKey].claimed = this.boardClaimed;
           this.playersMap[myKey].lines = this.playerScore;
+          if (hasMoved) {
+            this.playersMap[myKey].movedThisRound = true;
+          }
         }
         this.renderOpponentMatrices();
 
@@ -1148,8 +1184,28 @@
           type: 'PLAYER_BOARD_UPDATE',
           senderId: myKey,
           claimed: this.boardClaimed,
-          lines: this.playerScore
+          lines: this.playerScore,
+          movedThisRound: hasMoved
         });
+
+        if (this.isHost && hasMoved) {
+          this.checkAllPlayersMoved();
+        }
+      }
+
+      checkAllPlayersMoved() {
+        if (!this.isHost || !this.gameStarted || this.isPaused) return;
+        const playerKeys = Object.keys(this.playersMap);
+        if (playerKeys.length === 0) return;
+
+        const allMoved = playerKeys.every(id => this.playersMap[id].movedThisRound);
+        if (allMoved) {
+          setTimeout(() => {
+            if (this.gameStarted && !this.isPaused) {
+              this.hostTriggerRoll();
+            }
+          }, 600);
+        }
       }
 
       calculateBingoLines(grid) {
@@ -1227,6 +1283,12 @@
       hostTriggerRoll() {
         if (!this.isHost && this.mode !== 'OFFLINE') return;
 
+        Object.keys(this.playersMap).forEach(id => {
+          if (this.playersMap[id]) {
+            this.playersMap[id].movedThisRound = false;
+          }
+        });
+
         sound.playRollTick();
         this.roundNumber++;
         this.currentTarget = this.getRandomTargetNumber();
@@ -1253,6 +1315,12 @@
         this.currentTarget = msg.currentTarget;
         this.timerDuration = msg.timerDuration || 30;
 
+        Object.keys(this.playersMap).forEach(id => {
+          if (this.playersMap[id]) {
+            this.playersMap[id].movedThisRound = false;
+          }
+        });
+
         this.startNewRoundState();
         this.updateTargetDisplay();
         this.startRoundTimer();
@@ -1269,16 +1337,19 @@
           const ai = this.playersMap[aiId];
           if (!ai) return;
 
-          const delay = Math.floor(2000 + Math.random() * 6000);
+          const delay = Math.floor(1000 + Math.random() * 3000);
           setTimeout(() => {
-            if (!this.gameStarted) return;
+            if (!this.gameStarted || ai.movedThisRound) return;
+
             const unclaimedIndices = ai.claimed.map((c, i) => c ? null : i).filter(v => v !== null);
-            if (unclaimedIndices.length > 0 && Math.random() > 0.4) {
+            if (unclaimedIndices.length > 0 && Math.random() > 0.3) {
               const randomIndex = unclaimedIndices[Math.floor(Math.random() * unclaimedIndices.length)];
               ai.claimed[randomIndex] = true;
               ai.lines = this.calculateBingoLines(ai.claimed);
-              this.renderOpponentMatrices();
             }
+            ai.movedThisRound = true;
+            this.renderOpponentMatrices();
+            this.checkAllPlayersMoved();
           }, delay);
         });
       }
